@@ -9,3 +9,5 @@ outputs/
 uploads/
 
 venv/
+
+*.zip
