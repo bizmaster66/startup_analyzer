@@ -108,21 +108,114 @@ def ensure_bmc_shape(data: Dict[str, Any], company_name: str = "") -> Dict[str, 
     output["information_flows"] = _normalize_flow_items(output.get("information_flows", []))
     output["service_flows"] = _normalize_flow_items(output.get("service_flows", []))
 
-    _ensure_bottom_relationship(output, company_name)
+    _refine_diagram_structure(output, company_name)
     return output
 
 
-def _ensure_bottom_relationship(data: Dict[str, Any], company_name: str):
+def _refine_diagram_structure(data: Dict[str, Any], company_name: str):
     company_label = clean_korean_label(company_name, fallback=company_name)
     center_label = data.get("middle_layer", "핵심 플랫폼")
+    top_label = data.get("top_layer", ["핵심 고객"])[0]
+    left_label = data.get("left_actors", ["핵심 파트너"])[0]
+    right_label = data.get("right_actors", ["핵심 채널"])[0]
 
-    all_flows = data.get("money_flows", []) + data.get("information_flows", []) + data.get("service_flows", [])
-    has_bottom_flow = any(company_label and (flow.get("from") == company_label or flow.get("to") == company_label) for flow in all_flows)
-    if has_bottom_flow:
-        return
+    revenue_label = _choose_revenue_label(data.get("business_model_canvas", {}).get("revenue_streams", []))
+    cost_label = _choose_cost_label(data.get("business_model_canvas", {}).get("cost_structure", []), left_label)
+    info_top_label = _choose_info_top_label(data)
+    info_left_label = _choose_info_left_label(data)
+    info_right_label = _choose_info_right_label(right_label)
+    service_top_label = _choose_service_top_label(data)
+    service_right_label = _choose_service_right_label(right_label)
 
-    data["service_flows"].append({"from": company_label, "to": center_label, "label": "운영"})
-    data["information_flows"].append({"from": center_label, "to": company_label, "label": "운영 데이터"})
+    data["money_flows"] = [
+        {"from": top_label, "to": company_label, "label": revenue_label},
+        {"from": company_label, "to": left_label, "label": cost_label},
+    ]
+
+    info_flows = [
+        {"from": top_label, "to": center_label, "label": info_top_label},
+        {"from": left_label, "to": center_label, "label": info_left_label},
+        {"from": center_label, "to": company_label, "label": "운영 데이터"},
+    ]
+    if right_label:
+        info_flows.append({"from": right_label, "to": center_label, "label": info_right_label})
+    data["information_flows"] = info_flows
+
+    service_flows = [
+        {"from": center_label, "to": top_label, "label": service_top_label},
+        {"from": company_label, "to": center_label, "label": "플랫폼 운영"},
+        {"from": left_label, "to": center_label, "label": "기술 연동"},
+    ]
+    if right_label:
+        service_flows.append({"from": center_label, "to": right_label, "label": service_right_label})
+    data["service_flows"] = service_flows
+
+
+def _choose_revenue_label(revenue_streams: List[str]) -> str:
+    joined = " ".join(revenue_streams)
+    if "구독" in joined:
+        return "구독료"
+    if "수수료" in joined:
+        return "수수료"
+    if "라이선스" in joined:
+        return "라이선스비"
+    if "컨설팅" in joined:
+        return "컨설팅료"
+    return "이용료"
+
+
+def _choose_cost_label(cost_structure: List[str], left_label: str) -> str:
+    joined = " ".join(cost_structure)
+    if "모델" in left_label or "AI" in left_label:
+        return "모델 비용"
+    if "데이터" in left_label:
+        return "데이터 비용"
+    if "인프라" in joined:
+        return "인프라 비용"
+    if "라이선스" in joined:
+        return "라이선스비"
+    if "데이터" in joined:
+        return "데이터 비용"
+    return "운영 비용"
+
+
+def _choose_info_top_label(data: Dict[str, Any]) -> str:
+    joined = " ".join(data.get("business_model_canvas", {}).get("customer_relationships", []))
+    if "데이터" in joined:
+        return "사용 데이터"
+    return "요청 정보"
+
+
+def _choose_info_left_label(data: Dict[str, Any]) -> str:
+    joined = " ".join(data.get("business_model_canvas", {}).get("key_resources", []))
+    if "모델" in joined or "AI" in joined:
+        return "모델 정보"
+    if "데이터" in joined:
+        return "데이터 정보"
+    return "기술 정보"
+
+
+def _choose_info_right_label(right_label: str) -> str:
+    if any(token in right_label for token in ["도입", "구축", "SI", "공급", "파트너"]):
+        return "도입 정보"
+    return "채널 정보"
+
+
+def _choose_service_top_label(data: Dict[str, Any]) -> str:
+    joined = " ".join(data.get("business_model_canvas", {}).get("value_propositions", []))
+    if "보안" in joined:
+        return "보안 서비스"
+    if "분석" in joined:
+        return "분석 서비스"
+    if "자동화" in joined:
+        return "자동화 기능"
+    return "핵심 서비스"
+
+
+def _choose_service_right_label(right_label: str) -> str:
+    if any(token in right_label for token in ["도입", "구축", "SI", "공급", "파트너"]):
+        return "솔루션 제공"
+    return "채널 지원"
 
 
 def build_bmc_and_diagram_data(
