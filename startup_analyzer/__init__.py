@@ -1,0 +1,1 @@
+"""Startup analyzer application package."""
