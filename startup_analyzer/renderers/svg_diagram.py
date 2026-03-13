@@ -31,9 +31,6 @@ NOTE_BOXES = {
     "rm": (784, 344, 142, 86),
 }
 
-SUMMARY_BAR = (170, 656, 640, 46)
-
-
 def render_svg_preview(svg_bytes: bytes, height: int = 780):
     components.html(svg_bytes.decode("utf-8"), height=height, scrolling=True)
 
@@ -42,7 +39,7 @@ def build_editable_svg(data: Dict[str, Any], company_name: str) -> bytes:
     source = ensure_bmc_shape(data, company_name=company_name)
     node_labels = _build_node_labels(source, company_name)
     note_texts = _build_note_texts(source)
-    summary = _build_summary_texts(source)
+    subtitle = _build_subtitle(source)
     flows = _build_flow_specs(source, node_labels)
 
     flow_fragments = [_draw_flow(spec) for spec in flows]
@@ -61,16 +58,15 @@ def build_editable_svg(data: Dict[str, Any], company_name: str) -> bytes:
 </defs>
 <rect x="0" y="0" width="{CANVAS_WIDTH}" height="{CANVAS_HEIGHT}" fill="#ffffff"/>
 {_frame()}
-{_header(company_name, summary["subtitle"])}
+{_header(company_name, subtitle)}
 {_section_lines()}
 {''.join(note_fragments)}
 {''.join(flow_fragments)}
-{_person_node("top", *NODE_BOXES["top"], node_labels["top"])}
-{_block_node("left", *NODE_BOXES["left"], node_labels["left"], _node_kind(node_labels["left"]))}
-{_phone_node("center", *NODE_BOXES["center"], node_labels["center"])}
-{_block_node("right", *NODE_BOXES["right"], node_labels["right"], _node_kind(node_labels["right"]))}
+{_entity_node("top", *NODE_BOXES["top"], node_labels["top"], role="top")}
+{_entity_node("left", *NODE_BOXES["left"], node_labels["left"], role="left")}
+{_entity_node("center", *NODE_BOXES["center"], node_labels["center"], role="center")}
+{_entity_node("right", *NODE_BOXES["right"], node_labels["right"], role="right")}
 {_company_node("bottom", *NODE_BOXES["bottom"], node_labels["bottom"])}
-{_summary_bar(summary)}
 </svg>"""
     return svg.encode("utf-8")
 
@@ -125,24 +121,18 @@ def _build_note_texts(source: Dict[str, Any]) -> Dict[str, str]:
     summary = source.get("strategic_summary", {})
     bmc = source.get("business_model_canvas", {})
     return {
-        "lt": _note_snippet(summary.get("problem", ""), fallback="고객 문제를 간결하게 해결"),
-        "rt": _note_snippet(_first_item(bmc.get("revenue_streams", [])), fallback="반복 매출 구조 확보"),
-        "lm": _note_snippet(_first_item(bmc.get("value_propositions", [])), fallback="핵심 가치 제공"),
-        "rm": _note_snippet(_first_item(bmc.get("channels", [])), fallback="도입과 유통을 지원"),
+        "lt": _keyword_note(summary.get("problem", ""), fallback="보안 위협, 대응 지연"),
+        "rt": _keyword_note(_first_item(bmc.get("revenue_streams", [])), fallback="구독료, 라이선스"),
+        "lm": _keyword_note(_first_item(bmc.get("value_propositions", [])), fallback="보안 점검, 취약점 탐지"),
+        "rm": _keyword_note(_first_item(bmc.get("channels", [])), fallback="직접 영업, 파트너 도입"),
     }
 
 
-def _build_summary_texts(source: Dict[str, Any]) -> Dict[str, str]:
-    summary = source.get("strategic_summary", {})
-    bmc = source.get("business_model_canvas", {})
-    topic = _short_label(_first_item(source.get("business_model_canvas", {}).get("customer_segments", [])), "핵심 문제")
-    subtitle = _note_snippet(source.get("bmc_summary", ""), fallback=_first_item(bmc.get("value_propositions", [])) or "핵심 가치로 시장 문제를 해결")
-    return {
-        "topic": topic,
-        "정설": _note_snippet(summary.get("status_quo", ""), fallback="기존 방식은 느리고 비효율적이다"),
-        "역설": _note_snippet(summary.get("our_solution", ""), fallback="플랫폼으로 빠르게 해결한다"),
-        "subtitle": subtitle,
-    }
+def _build_subtitle(source: Dict[str, Any]) -> str:
+    bm_type = clean_korean_label(source.get("bm_type", ""), fallback="플랫폼형")
+    if not bm_type.endswith("형"):
+        bm_type = f"{bm_type}형"
+    return bm_type
 
 
 def _build_flow_specs(source: Dict[str, Any], node_labels: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -218,7 +208,7 @@ def _draw_flow(spec: Dict[str, Any]) -> str:
         f'<path d="{path}" fill="none" stroke="#111827" stroke-width="2.4" marker-end="url(#arrow-black)"/>'
         f'{_flow_marker(mx, my, spec["type"])}'
         f'<text x="{tx}" y="{ty}" text-anchor="{anchor}" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" '
-        f'font-size="13" font-weight="800" fill="#111827">{html.escape(spec["label"])}</text>'
+        f'font-size="12.5" font-weight="800" fill="#111827">{html.escape(spec["label"])}</text>'
     )
 
 
@@ -233,27 +223,39 @@ def _flow_marker(x: float, y: float, flow_type: str) -> str:
     return f'<circle cx="{x}" cy="{y}" r="7" fill="#d7f0f9" stroke="#111827" stroke-width="1.5"/>'
 
 
-def _person_node(node_id: str, x: float, y: float, w: float, h: float, label: str) -> str:
+def _entity_node(node_id: str, x: float, y: float, w: float, h: float, label: str, role: str) -> str:
+    kind = _node_kind(label, role)
     cx = x + w / 2
-    return (
-        f'<g id="{node_id}">'
-        f'<circle cx="{cx}" cy="{y+22}" r="16" fill="#ffffff" stroke="#111827" stroke-width="2.5"/>'
-        f'<path d="M {cx} {y+38} L {cx} {y+82} M {cx-22} {y+54} L {cx+22} {y+54} M {cx-24} {y+110} L {cx} {y+82} L {cx+24} {y+110}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
-        f'{_node_label(cx, y+h-8, label)}'
-        '</g>'
-    )
-
-
-def _phone_node(node_id: str, x: float, y: float, w: float, h: float, label: str) -> str:
-    cx = x + w / 2
-    return (
-        f'<g id="{node_id}">'
-        f'<rect x="{cx-30}" y="{y}" width="60" height="108" rx="12" ry="12" fill="#ffffff" stroke="#111827" stroke-width="2.8"/>'
-        f'<rect x="{cx-20}" y="{y+18}" width="40" height="64" fill="#f3f8fb" stroke="#111827" stroke-width="1.4"/>'
-        f'<circle cx="{cx}" cy="{y+92}" r="4" fill="#111827"/>'
-        f'{_node_label(cx, y+h-6, label)}'
-        '</g>'
-    )
+    if kind == "person":
+        shape = (
+            f'<circle cx="{cx}" cy="{y+24}" r="16" fill="#ffffff" stroke="#111827" stroke-width="2.5"/>'
+            f'<path d="M {cx} {y+40} L {cx} {y+82} M {cx-22} {y+56} L {cx+22} {y+56} '
+            f'M {cx-24} {y+110} L {cx} {y+82} L {cx+24} {y+110}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
+        )
+    elif kind == "platform":
+        shape = (
+            f'<rect x="{cx-38}" y="{y+4}" width="76" height="104" rx="18" ry="18" fill="#ffffff" stroke="#111827" stroke-width="2.6"/>'
+            f'<path d="M {cx-8} {y+24} a 22 22 0 1 1 0.1 0" fill="none" stroke="#47b7de" stroke-width="5"/>'
+            f'<path d="M {cx+8} {y+18} l 10 4 l -4 10" fill="none" stroke="#47b7de" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+        )
+    elif kind == "data":
+        shape = (
+            f'<rect x="{cx-26}" y="{y+8}" width="52" height="84" fill="#ffffff" stroke="#111827" stroke-width="2.4"/>'
+            f'<rect x="{cx-26}" y="{y+8}" width="52" height="44" fill="#a7ddf0" stroke="#111827" stroke-width="2.4"/>'
+        )
+    elif kind == "asset":
+        shape = f'<circle cx="{cx}" cy="{y+50}" r="28" fill="#8fd4ea" stroke="#111827" stroke-width="2.4"/>'
+    else:
+        shape = (
+            f'<rect x="{cx-30}" y="{y+10}" width="60" height="86" fill="#ffffff" stroke="#111827" stroke-width="2.4"/>'
+            f'<rect x="{cx-18}" y="{y+22}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+            f'<rect x="{cx-2}" y="{y+22}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+            f'<rect x="{cx+14}" y="{y+22}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+            f'<rect x="{cx-18}" y="{y+40}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+            f'<rect x="{cx-2}" y="{y+40}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+            f'<rect x="{cx+14}" y="{y+40}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.1"/>'
+        )
+    return f'<g id="{node_id}">{shape}{_node_label(cx, y+h-8, label)}</g>'
 
 
 def _company_node(node_id: str, x: float, y: float, w: float, h: float, label: str) -> str:
@@ -275,51 +277,16 @@ def _company_node(node_id: str, x: float, y: float, w: float, h: float, label: s
     )
 
 
-def _block_node(node_id: str, x: float, y: float, w: float, h: float, label: str, kind: str) -> str:
-    cx = x + w / 2
-    if kind == "정보":
-        shape = (
-            f'<rect x="{cx-24}" y="{y+6}" width="48" height="86" fill="#ffffff" stroke="#111827" stroke-width="2.6"/>'
-            f'<rect x="{cx-24}" y="{y+6}" width="48" height="42" fill="#bfe9f7" stroke="#111827" stroke-width="2.6"/>'
-        )
-    elif kind == "물건":
-        shape = f'<circle cx="{cx}" cy="{y+48}" r="26" fill="#8fd4ea" stroke="#111827" stroke-width="2.6"/>'
-    else:
-        shape = (
-            f'<rect x="{cx-26}" y="{y+6}" width="52" height="84" fill="#ffffff" stroke="#111827" stroke-width="2.6"/>'
-            f'<rect x="{cx-16}" y="{y+16}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.2"/>'
-            f'<rect x="{cx}" y="{y+16}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.2"/>'
-            f'<rect x="{cx-16}" y="{y+32}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.2"/>'
-            f'<rect x="{cx}" y="{y+32}" width="10" height="10" fill="#ffffff" stroke="#111827" stroke-width="1.2"/>'
-        )
-    return f'<g id="{node_id}">{shape}{_node_label(cx, y+h-6, label)}</g>'
-
-
 def _node_label(cx: float, y: float, label: str) -> str:
     lines = _wrap_text(label, max_chars=10, max_lines=2)
     return _multiline_text(cx, y, lines, 17, "#3aa7ca")
 
 
 def _note_box(x: float, y: float, w: float, h: float, body: str) -> str:
-    lines = _wrap_text(body, max_chars=12, max_lines=4)
+    lines = _wrap_text(body, max_chars=12, max_lines=3)
     return (
         f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="#edf8fc" stroke="none"/>'
-        f'{_multiline_text(x+8, y+18, lines, 11.5, "#60707c", weight="700", anchor="start")}'
-    )
-
-
-def _summary_bar(summary: Dict[str, str]) -> str:
-    x, y, w, h = SUMMARY_BAR
-    return (
-        f'<text x="{x-88}" y="{y+30}" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="16" font-weight="800" fill="#111827">{html.escape(summary["topic"])}</text>'
-        f'<rect x="{x}" y="{y}" width="62" height="{h}" fill="#1f8fb6"/>'
-        f'<text x="{x+31}" y="{y+29}" text-anchor="middle" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="14" font-weight="800" fill="#ffffff">기점</text>'
-        f'<rect x="{x+72}" y="{y}" width="62" height="{h}" fill="#2a9cc2"/>'
-        f'<text x="{x+103}" y="{y+19}" text-anchor="middle" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="13" font-weight="800" fill="#ffffff">정설</text>'
-        f'<text x="{x+150}" y="{y+18}" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="13" font-weight="800" fill="#111827">{html.escape(summary["정설"])}</text>'
-        f'<rect x="{x+72}" y="{y+24}" width="62" height="22" fill="#2a9cc2"/>'
-        f'<text x="{x+103}" y="{y+40}" text-anchor="middle" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="13" font-weight="800" fill="#ffffff">역설</text>'
-        f'<text x="{x+150}" y="{y+40}" font-family="Apple SD Gothic Neo, NanumGothic, Noto Sans CJK KR, sans-serif" font-size="13" font-weight="800" fill="#111827">{html.escape(summary["역설"])}</text>'
+        f'{_multiline_text(x+8, y+20, lines, 11.5, "#60707c", weight="700", anchor="start")}'
     )
 
 
@@ -360,6 +327,17 @@ def _resolve_node_key(name: str, node_labels: Dict[str, str]) -> str:
 
 def _short_label(text: Any, fallback: str) -> str:
     value = clean_korean_label(text, fallback=fallback)
+    replacements = {
+        "주요 금융기관": "금융기관",
+        "LLM 기반 서비스 기업": "AI 서비스사",
+        "클라우드 서비스 제공사": "기술 공급사",
+        "AI 기술 제공 업체": "기술 공급사",
+        "보안 솔루션 유통 파트너": "유통 파트너",
+        "직접 판매": "직접 고객",
+        "세이프엑스(SAIFEX)": "세이프엑스",
+        "세이프엑스(SAIFE X)": "세이프엑스",
+    }
+    value = replacements.get(value, value)
     value = value.replace("서비스", "").replace("플랫폼", "").replace("솔루션", "")
     value = value.strip()
     if not value:
@@ -370,26 +348,45 @@ def _short_label(text: Any, fallback: str) -> str:
 def _short_flow_label(text: Any) -> str:
     value = clean_korean_label(text, fallback="흐름")
     replacements = {
-        "플랫폼 운영": "운영",
-        "운영 데이터": "운영",
-        "요청 정보": "정보",
-        "사용 데이터": "정보",
-        "도입 정보": "도입",
-        "기술 연동": "연동",
-        "솔루션 제공": "제공",
-        "보안 서비스": "사용",
-        "모델 비용": "비용",
-        "인프라 비용": "비용",
+        "플랫폼 운영": "운영 지원",
+        "운영 데이터": "운영 데이터",
+        "요청 정보": "보안 요청",
+        "사용 데이터": "사용 데이터",
+        "도입 정보": "도입 정보",
+        "채널 정보": "채널 정보",
+        "기술 연동": "기술 연동",
+        "솔루션 제공": "서비스 제공",
+        "채널 지원": "채널 지원",
+        "보안 서비스": "분석 결과",
+        "모델 비용": "모델 비용",
+        "인프라 비용": "인프라 비용",
+        "구독료": "구독료",
     }
-    return replacements.get(value, value[:8])
+    return replacements.get(value, value[:10])
 
 
-def _note_snippet(text: Any, fallback: str) -> str:
+def _keyword_note(text: Any, fallback: str) -> str:
     value = clean_korean_label(text, fallback=fallback)
-    value = value.replace("  ", " ").strip()
-    if len(value) > 32:
-        value = value[:32].rstrip() + "..."
-    return value
+    replacements = [
+        (" 및 ", ", "),
+        (" 와 ", ", "),
+        (" 그리고 ", ", "),
+        (" 생성형 AI ", "생성형AI "),
+        (" 취약점 ", "취약점 "),
+        (" 대응 ", "대응 "),
+    ]
+    for old, new in replacements:
+        value = value.replace(old, new)
+    value = value.replace(" 해결", "").replace(" 제공", "").replace(" 구조", "")
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts:
+        parts = [fallback]
+    short_parts = []
+    for part in parts[:3]:
+        cleaned = part[:12].strip()
+        if cleaned:
+            short_parts.append(cleaned)
+    return ", ".join(short_parts[:3])
 
 
 def _first_item(values: List[str]) -> str:
@@ -423,10 +420,16 @@ def _wrap_text(text: str, max_chars: int = 10, max_lines: int = 2) -> List[str]:
     return lines
 
 
-def _node_kind(label: str) -> str:
+def _node_kind(label: str, role: str) -> str:
     text = clean_korean_label(label)
+    if role == "center":
+        return "platform"
+    if role == "top":
+        if any(token in text for token in ["기관", "기업", "회사", "고객사", "은행"]):
+            return "company"
+        return "person"
     if any(token in text for token in ["데이터", "정보", "점수", "토큰"]):
-        return "정보"
-    if any(token in text for token in ["상품", "물건", "펀드", "자산", "토큰", "중고품"]):
-        return "물건"
-    return "회사"
+        return "data"
+    if any(token in text for token in ["상품", "물건", "자산", "펀드", "중고품"]):
+        return "asset"
+    return "company"
