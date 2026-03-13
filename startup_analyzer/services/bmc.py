@@ -39,6 +39,9 @@ BMC_SCHEMA_HINT = """
 }
 """.strip()
 
+EXCLUDED_PARTNER_TERMS = ["투자", "벤처캐피탈", "VC", "엑셀러레이터", "인베스트", "펀드"]
+GENERIC_CHANNEL_TERMS = ["온라인", "플랫폼", "웹사이트", "직접 영업", "영업", "커뮤니티"]
+
 
 def _normalize_flow_items(items: Any) -> List[Dict[str, str]]:
     normalized = []
@@ -85,24 +88,14 @@ def ensure_bmc_shape(data: Dict[str, Any], company_name: str = "") -> Dict[str, 
         "cost_structure": [clean_korean_label(x) for x in normalize_text_list(bmc.get("cost_structure", []))],
     }
 
-    output["top_layer"] = [
-        clean_korean_label(x) for x in normalize_text_list(output.get("top_layer", []), limit=3)
-    ]
-    output["left_actors"] = [
-        clean_korean_label(x) for x in normalize_text_list(output.get("left_actors", []), limit=4)
-    ]
-    output["right_actors"] = [
-        clean_korean_label(x) for x in normalize_text_list(output.get("right_actors", []), limit=4)
-    ]
+    output["top_layer"] = [clean_korean_label(x) for x in normalize_text_list(output.get("top_layer", []), limit=3)]
+    output["left_actors"] = [clean_korean_label(x) for x in normalize_text_list(output.get("left_actors", []), limit=4)]
+    output["right_actors"] = [clean_korean_label(x) for x in normalize_text_list(output.get("right_actors", []), limit=4)]
     output["middle_layer"] = clean_korean_label(output.get("middle_layer", ""), fallback="핵심 플랫폼")
 
-    if not any(output["top_layer"]):
-        output["top_layer"] = output["business_model_canvas"]["customer_segments"][:1] or ["핵심 고객"]
-    if not any(output["left_actors"]):
-        output["left_actors"] = output["business_model_canvas"]["key_partnerships"][:1] or ["핵심 파트너"]
-    if not any(output["right_actors"]):
-        right_candidates = output["business_model_canvas"]["channels"] or output["business_model_canvas"]["customer_relationships"]
-        output["right_actors"] = right_candidates[:1] or ["핵심 채널"]
+    output["top_layer"] = _derive_top_layer(output)
+    output["left_actors"] = _derive_left_actors(output)
+    output["right_actors"] = _derive_right_actors(output)
 
     output["money_flows"] = _normalize_flow_items(output.get("money_flows", []))
     output["information_flows"] = _normalize_flow_items(output.get("information_flows", []))
@@ -226,6 +219,16 @@ def build_bmc_and_diagram_data(
     profile: Dict[str, Any],
     keywords: List[str],
 ) -> Dict[str, Any]:
+    filtered_profile = {
+        "problem_definition": profile.get("problem_definition", ""),
+        "solution_value_prop": profile.get("solution_value_prop", ""),
+        "revenue_model_type": profile.get("revenue_model_type", ""),
+        "product_core_features": profile.get("product_core_features", []),
+        "core_tech_moat": profile.get("core_tech_moat", ""),
+        "ceo_vision_summary": profile.get("ceo_vision_summary", ""),
+        "industry_keywords": profile.get("industry_keywords", []),
+    }
+
     prompt = f"""
 당신은 스타트업 사업모델 분석가이다.
 
@@ -240,7 +243,7 @@ def build_bmc_and_diagram_data(
 {facts}
 
 [기존 기업 분석 JSON]
-{json.dumps(profile, ensure_ascii=False, indent=2)}
+{json.dumps(filtered_profile, ensure_ascii=False, indent=2)}
 
 [핵심 목표]
 1. 정식 Business Model Canvas 9블록을 완성한다.
@@ -289,3 +292,45 @@ def build_bmc_and_diagram_data(
         data = extract_json(repaired)
 
     return ensure_bmc_shape(data, company_name=company_name)
+
+
+def _derive_top_layer(data: Dict[str, Any]) -> List[str]:
+    customer_segments = data.get("business_model_canvas", {}).get("customer_segments", [])
+    for item in customer_segments + data.get("top_layer", []):
+        label = clean_korean_label(item)
+        if label:
+            return [label]
+    return ["핵심 고객"]
+
+
+def _derive_left_actors(data: Dict[str, Any]) -> List[str]:
+    candidates = (
+        data.get("business_model_canvas", {}).get("key_partnerships", [])
+        + data.get("left_actors", [])
+        + data.get("business_model_canvas", {}).get("key_resources", [])
+    )
+    for item in candidates:
+        label = clean_korean_label(item)
+        if not label:
+            continue
+        if any(term.lower() in label.lower() for term in EXCLUDED_PARTNER_TERMS):
+            continue
+        return [label]
+    return ["핵심 파트너"]
+
+
+def _derive_right_actors(data: Dict[str, Any]) -> List[str]:
+    candidates = data.get("business_model_canvas", {}).get("channels", []) + data.get("right_actors", [])
+    for item in candidates:
+        label = clean_korean_label(item)
+        if not label:
+            continue
+        if any(term in label for term in GENERIC_CHANNEL_TERMS):
+            continue
+        return [label]
+    if candidates:
+        label = clean_korean_label(candidates[0], fallback="핵심 채널")
+        if label and not label.endswith(("채널", "파트너", "공급사", "고객사", "리셀러")):
+            label = f"{label} 채널"
+        return [label]
+    return ["핵심 채널"]

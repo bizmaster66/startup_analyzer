@@ -32,44 +32,68 @@ def main():
     render_page_header()
     render_sidebar()
 
+    if "analysis_result" not in st.session_state:
+        st.session_state.analysis_result = None
+
     company_name, ceo_name, raw_text, run = render_input_form()
-    if not run:
+    if run:
+        if not company_name.strip():
+            st.error("기업명을 입력해주세요.")
+            return
+        if not ceo_name.strip():
+            st.error("대표자명을 입력해주세요.")
+            return
+
+        api_key = get_gemini_api_key()
+        if not api_key:
+            render_api_key_error()
+            return
+
+        client = build_client(api_key)
+
+        render_step(1)
+        facts = gather_company_facts(client, company_name, ceo_name, raw_text)
+
+        render_step(2)
+        try:
+            profile = generate_company_profile(client, company_name, facts)
+        except Exception as exc:
+            st.error(f"기업 분석 JSON 생성에 실패했습니다: {exc}")
+            return
+
+        keywords = extract_keywords(profile)
+        try:
+            bmc_data = build_bmc_and_diagram_data(client, company_name, ceo_name, facts, profile, keywords)
+        except Exception as exc:
+            st.error(f"BMC 및 BM 다이어그램 데이터 생성에 실패했습니다: {exc}")
+            return
+
+        diagram_svg = build_editable_svg(bmc_data, company_name)
+        overview_report_md = build_overview_report_markdown(company_name, ceo_name, profile, keywords, bmc_data)
+        bmc_md = build_bmc_markdown(bmc_data)
+        st.session_state.analysis_result = {
+            "company_name": company_name,
+            "ceo_name": ceo_name,
+            "profile": profile,
+            "keywords": keywords,
+            "bmc_data": bmc_data,
+            "diagram_svg": diagram_svg,
+            "overview_report_md": overview_report_md,
+            "bmc_md": bmc_md,
+        }
+
+    result = st.session_state.analysis_result
+    if not result:
         return
 
-    if not company_name.strip():
-        st.error("기업명을 입력해주세요.")
-        return
-    if not ceo_name.strip():
-        st.error("대표자명을 입력해주세요.")
-        return
-
-    api_key = get_gemini_api_key()
-    if not api_key:
-        render_api_key_error()
-        return
-
-    client = build_client(api_key)
-
-    render_step(1)
-    facts = gather_company_facts(client, company_name, ceo_name, raw_text)
-
-    render_step(2)
-    try:
-        profile = generate_company_profile(client, company_name, facts)
-    except Exception as exc:
-        st.error(f"기업 분석 JSON 생성에 실패했습니다: {exc}")
-        return
-
-    keywords = extract_keywords(profile)
-    try:
-        bmc_data = build_bmc_and_diagram_data(client, company_name, ceo_name, facts, profile, keywords)
-    except Exception as exc:
-        st.error(f"BMC 및 BM 다이어그램 데이터 생성에 실패했습니다: {exc}")
-        return
-
-    diagram_svg = build_editable_svg(bmc_data, company_name)
-    overview_report_md = build_overview_report_markdown(company_name, ceo_name, profile, keywords, bmc_data)
-    bmc_md = build_bmc_markdown(bmc_data)
+    company_name = result["company_name"]
+    ceo_name = result["ceo_name"]
+    profile = result["profile"]
+    keywords = result["keywords"]
+    bmc_data = result["bmc_data"]
+    diagram_svg = result["diagram_svg"]
+    overview_report_md = result["overview_report_md"]
+    bmc_md = result["bmc_md"]
 
     render_step(3)
     st.markdown("## 기업 분석 결과")
