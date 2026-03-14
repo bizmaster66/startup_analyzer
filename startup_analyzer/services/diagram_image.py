@@ -40,6 +40,7 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any]) -> str:
     info_flows = _join_flow_labels(bmc_data.get("information_flows", []), fallback="사용 데이터, 도입 정보")
     money_flows = _join_flow_labels(bmc_data.get("money_flows", []), fallback="구독 매출, 제휴 수수료")
     service_flows = _join_flow_labels(bmc_data.get("service_flows", []), fallback="분석 결과, 인프라 제공")
+    validated_flows = _build_validated_role_flows(bmc_data)
 
     return f"""
 한국어 비즈니스 생태계 다이어그램 PNG를 생성하라.
@@ -94,6 +95,9 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any]) -> str:
 - 돈 흐름: {money_flows}
 - 서비스 흐름: {service_flows}
 
+[검증된 화살표 방향]
+{validated_flows}
+
 [중요 제약]
 - 텍스트 과밀 금지
 - 카드끼리 겹침 금지
@@ -101,6 +105,9 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any]) -> str:
 - 실험적인 플로우차트처럼 보이면 안 됨
 - polished consulting-style ecosystem diagram 으로 보이게 할 것
 - 범례 누락 금지
+- 화살표 방향은 반드시 위의 [검증된 화살표 방향]을 그대로 따를 것
+- label만 보고 임의로 화살표 방향을 바꾸지 말 것
+- Users, Core Platform, Providers, Partners, Consumers, Infrastructure 간 방향을 뒤집지 말 것
 - 최종 결과는 PNG 이미지로 생성
 """.strip()
 
@@ -125,3 +132,43 @@ def _join_flow_labels(flows: List[Dict[str, str]], fallback: str) -> str:
         if len(labels) >= 4:
             break
     return ", ".join(labels) if labels else fallback
+
+
+def _build_validated_role_flows(bmc_data: Dict[str, Any]) -> str:
+    flows = []
+
+    info_labels = _extract_flow_labels(bmc_data.get("information_flows", []))
+    money_labels = _extract_flow_labels(bmc_data.get("money_flows", []))
+    service_labels = _extract_flow_labels(bmc_data.get("service_flows", []))
+
+    if info_labels:
+        flows.append(f"- 정보: Users -> Core Platform : {info_labels[0]}")
+    if len(info_labels) > 1:
+        flows.append(f"- 정보: Providers -> Core Platform : {info_labels[1]}")
+    if len(info_labels) > 2:
+        flows.append(f"- 정보: Partners -> Core Platform : {info_labels[2]}")
+
+    if money_labels:
+        flows.append(f"- 돈: Users -> Core Platform : {money_labels[0]}")
+    if len(money_labels) > 1:
+        flows.append(f"- 돈: Core Platform -> Infrastructure : {money_labels[1]}")
+
+    if service_labels:
+        flows.append(f"- 서비스: Core Platform -> Users : {service_labels[0]}")
+    if len(service_labels) > 1:
+        flows.append(f"- 서비스: Providers -> Core Platform : {service_labels[1]}")
+    if len(service_labels) > 2:
+        flows.append(f"- 서비스: Core Platform -> Partners : {service_labels[2]}")
+
+    return "\n".join(flows[:8]) if flows else "- 정보: Users -> Core Platform : 사용 데이터"
+
+
+def _extract_flow_labels(flows: List[Dict[str, str]]) -> List[str]:
+    labels = []
+    for flow in flows or []:
+        label = clean_korean_label(flow.get("label", ""))
+        if label and label not in labels:
+            labels.append(label)
+        if len(labels) >= 4:
+            break
+    return labels
