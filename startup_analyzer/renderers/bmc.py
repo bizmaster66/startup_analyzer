@@ -26,23 +26,25 @@ def _bmc_cell_html(bmc: Dict[str, Any], title: str, key: str) -> str:
 def render_bmc(data: Dict[str, Any]):
     bmc = ensure_bmc_shape(data).get("business_model_canvas", {})
     table_html = f"""
-    <table style="border-collapse:collapse;width:100%;table-layout:fixed;background:#fff;">
-      <tr>
-        <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 파트너", "key_partnerships")}</td>
-        <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 활동", "key_activities")}</td>
-        <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "가치 제안", "value_propositions")}</td>
-        <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "고객 관계", "customer_relationships")}</td>
-        <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "고객 세그먼트", "customer_segments")}</td>
-      </tr>
-      <tr>
-        <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 자원", "key_resources")}</td>
-        <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "채널", "channels")}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "비용 구조", "cost_structure")}</td>
-        <td colspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "수익 흐름", "revenue_streams")}</td>
-      </tr>
-    </table>
+    <div style="width:80%;margin:0 auto;">
+      <table style="border-collapse:collapse;width:100%;table-layout:fixed;background:#fff;">
+        <tr>
+          <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 파트너", "key_partnerships")}</td>
+          <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 활동", "key_activities")}</td>
+          <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "가치 제안", "value_propositions")}</td>
+          <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "고객 관계", "customer_relationships")}</td>
+          <td rowspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "고객 세그먼트", "customer_segments")}</td>
+        </tr>
+        <tr>
+          <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "핵심 자원", "key_resources")}</td>
+          <td style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "채널", "channels")}</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "비용 구조", "cost_structure")}</td>
+          <td colspan="2" style="border:2px solid #222;padding:12px;vertical-align:top;">{_bmc_cell_html(bmc, "수익 흐름", "revenue_streams")}</td>
+        </tr>
+      </table>
+    </div>
     """
     st.markdown(table_html, unsafe_allow_html=True)
 

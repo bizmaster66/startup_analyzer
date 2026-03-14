@@ -70,6 +70,11 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any]) -> str:
 - 각 노드는 title, subtitle, bullet 2~3개만 포함
 - 글자는 모두 한국어
 - 전체 화면 비율은 가로형 16:10에 가깝게
+- 하단 중앙에 범례를 반드시 포함
+- 범례 텍스트는 정확히 다음 구조를 따를 것:
+  범례: $ = 돈 흐름   □ = 정보 흐름   ○ = 서비스/자산 흐름
+- 범례에서도 초록색 달러, 파란색 사각형, 주황색 원형 마커를 실제로 그릴 것
+- 범례는 다이어그램 본체와 겹치지 않게 하단 여백에 배치할 것
 
 [콘텐츠]
 - 회사명: {company_name}
@@ -95,6 +100,7 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any]) -> str:
 - 화살표와 라벨 충돌 금지
 - 실험적인 플로우차트처럼 보이면 안 됨
 - polished consulting-style ecosystem diagram 으로 보이게 할 것
+- 범례 누락 금지
 - 최종 결과는 PNG 이미지로 생성
 """.strip()
 

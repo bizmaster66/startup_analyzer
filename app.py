@@ -119,7 +119,9 @@ def main():
     render_bmc(bmc_data)
 
     st.markdown("## BM 다이어그램")
-    st.image(diagram_png, use_container_width=True)
+    _, image_col, _ = st.columns([0.1, 0.8, 0.1])
+    with image_col:
+        st.image(diagram_png, use_container_width=True)
 
     st.markdown("## 다운로드")
     safe_name = safe_filename(company_name)
