@@ -7,7 +7,6 @@ from startup_analyzer.renderers.bmc import (
     build_overview_report_markdown,
     render_bmc,
 )
-from startup_analyzer.renderers.svg_diagram import build_editable_svg, render_svg_preview
 from startup_analyzer.renderers.ui import (
     configure_page,
     render_api_key_error,
@@ -24,6 +23,7 @@ from startup_analyzer.services.analysis import (
     get_gemini_api_key,
 )
 from startup_analyzer.services.bmc import build_bmc_and_diagram_data
+from startup_analyzer.services.diagram_image import generate_bm_diagram_png
 from startup_analyzer.utils.text import extract_keywords, normalize_text_list, safe_filename
 
 
@@ -68,7 +68,11 @@ def main():
             st.error(f"BMC 및 BM 다이어그램 데이터 생성에 실패했습니다: {exc}")
             return
 
-        diagram_svg = build_editable_svg(bmc_data, company_name)
+        try:
+            diagram_png = generate_bm_diagram_png(client, company_name, bmc_data)
+        except Exception as exc:
+            st.error(f"BM 다이어그램 이미지 생성에 실패했습니다: {exc}")
+            return
         overview_report_md = build_overview_report_markdown(company_name, ceo_name, profile, keywords, bmc_data)
         bmc_md = build_bmc_markdown(bmc_data)
         st.session_state.analysis_result = {
@@ -77,7 +81,7 @@ def main():
             "profile": profile,
             "keywords": keywords,
             "bmc_data": bmc_data,
-            "diagram_svg": diagram_svg,
+            "diagram_png": diagram_png,
             "overview_report_md": overview_report_md,
             "bmc_md": bmc_md,
         }
@@ -91,7 +95,7 @@ def main():
     profile = result["profile"]
     keywords = result["keywords"]
     bmc_data = result["bmc_data"]
-    diagram_svg = result["diagram_svg"]
+    diagram_png = result["diagram_png"]
     overview_report_md = result["overview_report_md"]
     bmc_md = result["bmc_md"]
 
@@ -115,7 +119,7 @@ def main():
     render_bmc(bmc_data)
 
     st.markdown("## BM 다이어그램")
-    render_svg_preview(diagram_svg)
+    st.image(diagram_png, use_container_width=True)
 
     st.markdown("## 다운로드")
     safe_name = safe_filename(company_name)
@@ -141,9 +145,9 @@ def main():
     with col_c:
         st.download_button(
             "BM 다이어그램 다운로드",
-            data=diagram_svg,
-            file_name=f"BM_Diagram_{safe_name}_{today}.svg",
-            mime="image/svg+xml",
+            data=diagram_png,
+            file_name=f"BM_Diagram_{safe_name}_{today}.png",
+            mime="image/png",
             use_container_width=True,
         )
 
