@@ -5,7 +5,7 @@ from google import genai
 from startup_analyzer.utils.text import clean_korean_label
 
 
-IMAGE_MODEL_NAME = "gemini-2.5-flash-image"
+IMAGE_MODEL = "gemini-3.1-flash-image-preview"
 
 
 def generate_bm_diagram_png(
@@ -15,7 +15,7 @@ def generate_bm_diagram_png(
 ) -> bytes:
     prompt = _build_diagram_prompt(company_name, bmc_data)
     response = client.models.generate_content(
-        model=IMAGE_MODEL_NAME,
+        model=IMAGE_MODEL,
         contents=[prompt],
     )
 

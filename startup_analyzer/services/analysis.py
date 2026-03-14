@@ -7,7 +7,7 @@ from google.genai import types
 from startup_analyzer.utils.json_utils import extract_json, repair_json_with_model
 
 
-MODEL_NAME = "gemini-2.0-flash"
+TEXT_MODEL = "gemini-2.5-flash"
 
 
 PROFILE_SCHEMA_HINT = """
@@ -56,7 +56,7 @@ def gather_company_facts(
 """
 
     response = client.models.generate_content(
-        model=MODEL_NAME,
+        model=TEXT_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
             tools=[google_tool],
@@ -98,7 +98,7 @@ def generate_company_profile(
 """
 
     response = client.models.generate_content(
-        model=MODEL_NAME,
+        model=TEXT_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="text/plain"),
     )
@@ -107,5 +107,5 @@ def generate_company_profile(
     try:
         return extract_json(raw_text)
     except Exception:
-        fixed_text = repair_json_with_model(client, MODEL_NAME, raw_text, schema_hint=PROFILE_SCHEMA_HINT)
+        fixed_text = repair_json_with_model(client, TEXT_MODEL, raw_text, schema_hint=PROFILE_SCHEMA_HINT)
         return extract_json(fixed_text)

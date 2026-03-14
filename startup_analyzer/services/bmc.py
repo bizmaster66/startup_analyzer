@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from google import genai
 from google.genai import types
 
-from startup_analyzer.services.analysis import MODEL_NAME
+from startup_analyzer.services.analysis import TEXT_MODEL
 from startup_analyzer.utils.json_utils import extract_json, repair_json_with_model
 from startup_analyzer.utils.text import clean_korean_label, normalize_text_list
 
@@ -279,7 +279,7 @@ def build_bmc_and_diagram_data(
 """
 
     response = client.models.generate_content(
-        model=MODEL_NAME,
+        model=TEXT_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="text/plain"),
     )
@@ -288,7 +288,7 @@ def build_bmc_and_diagram_data(
     try:
         data = extract_json(raw_text)
     except Exception:
-        repaired = repair_json_with_model(client, MODEL_NAME, raw_text, schema_hint=BMC_SCHEMA_HINT)
+        repaired = repair_json_with_model(client, TEXT_MODEL, raw_text, schema_hint=BMC_SCHEMA_HINT)
         data = extract_json(repaired)
 
     return ensure_bmc_shape(data, company_name=company_name)
