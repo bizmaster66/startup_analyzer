@@ -56,14 +56,18 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 [목표]
 - 투자자 및 컨설팅 슬라이드에 즉시 넣을 수 있는 전문가 수준의 Business Model Canvas 3x3 다이어그램
 - 복잡한 장식이나 실험적인 플로우차트를 절대 금지하며, 깔끔하고 정돈된 BI 대시보드 형태를 유지할 것
+- 전체 톤앤매너는 미니멀한 컨설팅 스타일의 ecosystem map처럼 보이게 할 것
+- 현재 구성과 콘텐츠는 유지하되, 시각적 인상은 가벼운 카드형 대시보드보다 정제된 전략 다이어그램에 가깝게 만들 것
 
 [시각 스타일]
 - 배경: 흰색 또는 아주 연한 회색
-- 카드: 부드러운 그림자가 있는 rounded rectangle
-- 테마: 옅은 파스텔 블루/그레이 카드 배경, 진한 네이비 텍스트
+- 카드: 필요할 경우에만 아주 연한 회색 또는 흰색 배경의 미세한 rounded rectangle을 사용하고, 두꺼운 카드 박스나 강한 그림자는 금지
+- 카드: 카드보다 노드 라벨과 흐름이 먼저 보이도록, 프레임은 매우 얇고 절제된 outline 스타일로 처리
+- 테마: 흰 배경, 짙은 회색 또는 검은 텍스트, 정보/돈/서비스 흐름만 색을 사용하는 컨설팅 다이어그램 톤
 - 아이콘: 이모지나 캐주얼한 이모티콘 사용 금지
-- 아이콘: 각 카드에는 발표자료/컨설팅 슬라이드에 적합한 전문적인 2D flat vector business icon만 작게 배치
-- 아이콘: 선명하고 절제된 corporate UI icon style을 사용할 것
+- 아이콘: 각 노드에는 발표자료/컨설팅 슬라이드에 적합한 전문적인 monochrome line icon 또는 simple flat business icon만 작게 배치
+- 아이콘: 검정 또는 짙은 회색 중심의 절제된 corporate UI icon style을 사용할 것
+- 아이콘: 귀엽거나 장식적인 그림체, 스티커 느낌, 3D 느낌, colorful emoji style 금지
 - 폰트/텍스트: 전문 보고서용 슬라이드처럼 가독성이 높은 sans-serif 스타일로 표현
 - 폰트/텍스트: 전체 텍스트는 현재 기본보다 확실히 축소하되, 발표자료에서 읽기 어려울 정도로 작게 만들지는 말 것
 - 폰트/텍스트: title, subtitle, bullet 각각의 최대 글자 크기를 엄격히 제한해 카드 내부를 지배하지 않게 할 것
@@ -77,6 +81,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 폰트/텍스트: 글자 두께, 줄간격, 여백이 전문적인 corporate slide 품질로 보이게 할 것
 - 폰트/텍스트: 타이틀, 서브타이틀, bullet 모두 중앙 또는 좌측 정렬 기준이 일관되게 유지되도록 할 것
 - 폰트/텍스트: 긴 문장을 강제로 줄바꿈하지 말고, 더 짧은 표현으로 축약해 가독성을 확보할 것
+- 폰트/텍스트: 샘플 전략 다이어그램처럼 title은 semibold 또는 bold, subtitle과 bullet은 regular 또는 medium으로 처리할 것
+- 폰트/텍스트: 텍스트 색은 검정 또는 매우 짙은 회색으로 유지하고, 본문에 불필요한 색상 강조를 넣지 말 것
 - 각 노드는 title 1줄, subtitle 1줄, bullet 2~3개만 포함
 - 정보 흐름은 파란색 + 사각형 마커
 - 돈 흐름은 초록색 + 달러 마커
@@ -138,6 +144,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 카드끼리 겹침 금지
 - 화살표와 라벨이 카드나 글자를 관통하지 않도록 곡선형으로 우회할 것
 - polished consulting-style ecosystem diagram 으로 보이게 할 것
+- 샘플 전략 다이어그램처럼 넓은 여백, 절제된 아이콘, 작은 텍스트, 선 중심의 구조를 유지할 것
+- 과한 카드 장식, 큰 제목, 큰 아이콘, 만화 같은 스타일, 이모지 스타일을 절대 사용하지 말 것
 - 범례 누락 금지
 - 화살표 방향은 반드시 위의 [검증된 화살표 방향]을 그대로 따를 것
 - 위의 방향 목록에 없는 추가 화살표는 만들지 말 것
