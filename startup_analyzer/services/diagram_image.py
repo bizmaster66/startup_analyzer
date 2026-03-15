@@ -35,19 +35,20 @@ def generate_bm_diagram_png(
 def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated_flows: List[Dict[str, str]]) -> str:
     bmc = bmc_data.get("business_model_canvas", {}) or {}
 
-    market_needs = _join_items(bmc.get("customer_relationships", []), fallback="시장 니즈")
-    target_users = _join_items(bmc.get("customer_segments", []), fallback="핵심 고객")
-    community_channels = _join_items(bmc.get("channels", []), fallback="고객 채널")
-    value_prop = _join_items(bmc.get("value_propositions", []), fallback="제공 가치")
+    problem_items = _problem_items(bmc_data)
+    target_items = _compact_items(bmc.get("customer_segments", []), fallback_items=["핵심 고객"])
+    channel_items = _compact_items(bmc.get("channels", []), fallback_items=["고객 접점"])
+    partner_items = _compact_items(bmc.get("key_partnerships", []), fallback_items=["핵심 파트너"])
     core_platform = clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
-    activities = _join_items(bmc.get("key_activities", []), fallback="핵심 활동")
-    partners = _join_items(bmc.get("key_partnerships", []), fallback="핵심 파트너")
+    operating_items = _compact_items(bmc.get("key_activities", []), fallback_items=["핵심 운영"])
+    value_items = _compact_items(bmc.get("value_propositions", []), fallback_items=["차별 효익"])
     company = company_name
-    resources = _join_items(bmc.get("key_resources", []), fallback="핵심 자원/경쟁력")
+    company_items = _company_items(bmc_data, company_name)
+    moat_items = _compact_items(bmc.get("key_resources", []), fallback_items=["핵심 자원"])
 
-    info_flows = _join_flow_labels(bmc_data.get("information_flows", []), fallback="사용 데이터, 도입 정보")
-    money_flows = _join_flow_labels(bmc_data.get("money_flows", []), fallback="구독 매출, 제휴 수수료")
-    service_flows = _join_flow_labels(bmc_data.get("service_flows", []), fallback="분석 결과, 인프라 제공")
+    info_flows = _join_validated_labels_by_type(validated_flows, "정보", fallback="사용 데이터, 요청 정보")
+    money_flows = _join_validated_labels_by_type(validated_flows, "돈", fallback="구독료, 수수료")
+    service_flows = _join_validated_labels_by_type(validated_flows, "서비스", fallback="핵심 서비스, 플랫폼 운영")
     validated_flow_lines = _format_validated_flows(validated_flows)
 
     return f"""
@@ -99,6 +100,7 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 출력 해상도는 1k급으로 생성할 것
 - 가로형 기준 약 1024px 너비의 선명한 PNG로 생성할 것
 - 저해상도, 흐릿한 텍스트, 압축 artifacts 금지
+- 3x3 좌표 번호(예: 1-1, 2-3) 같은 템플릿 번호 표시는 절대 넣지 말 것
 
 [레이아웃 및 배치 (엄격한 3x3 Grid)]
 - 반드시 가로 3칸, 세로 3칸의 균형 잡힌 그리드 구조
@@ -118,15 +120,16 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 [콘텐츠 주입 데이터 (3x3)]
 - 회사명: {company_name}
 - BM 유형: {clean_korean_label(bmc_data.get("bm_type", ""), fallback="플랫폼형")}
-- [상단-좌측 Problem] 시장 문제: {market_needs}
-- [상단-중앙 Target] 핵심 고객: {target_users}
-- [상단-우측 Channel] 고객 접점/영업: {community_channels}
-- [중단-좌측 Partner] 파트너 관계: {partners}
+- [상단-좌측 Problem] 시장 문제 bullet: {", ".join(problem_items)}
+- [상단-중앙 Target] 핵심 고객 bullet: {", ".join(target_items)}
+- [상단-우측 Channel] 고객 접점/영업 bullet: {", ".join(channel_items)}
+- [중단-좌측 Partner] 파트너 관계 bullet: {", ".join(partner_items)}
 - [중단-중앙 Core] 핵심 사업 키워드: {core_platform}
-- [중단-우측 Operating] 핵심 활동: {activities}
-- [하단-좌측 Value Proposition] 차별적 효익: {value_prop}
+- [중단-우측 Operating] 핵심 활동 bullet: {", ".join(operating_items)}
+- [하단-좌측 Value Proposition] 차별적 효익 bullet: {", ".join(value_items)}
 - [하단-중앙 Company] 실제 기업명: {company}
-- [하단-우측 Moat] 핵심 자원/경쟁력: {resources}
+- [하단-중앙 Company] 운영/재무 주체 bullet: {", ".join(company_items)}
+- [하단-우측 Moat] 핵심 자원/경쟁력 bullet: {", ".join(moat_items)}
 
 [노드 텍스트 작성 방식]
 - 3x3 각 칸의 title은 위에서 지정한 영문 title을 반드시 그대로 사용할 것. 단, 중앙 중앙(2-2)만 예외적으로 핵심 사업 키워드를 title로 사용
@@ -137,6 +140,7 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 각 노드의 bullet은 1~2개만 사용하고, 모두 짧은 실무 키워드 또는 명사구로 작성할 것
 - 각 노드의 bullet은 동사형 문장보다 제품 기능, 운영 요소, 고객 특성, 파트너 기능처럼 업무적으로 읽히는 키워드 중심으로 작성할 것
 - 각 노드의 bullet은 한 항목당 10자 내외의 짧은 표현을 우선하고, 장문 서술형 문장은 금지할 것
+- 각 노드는 위 [콘텐츠 주입 데이터]에서 준 bullet만 사용하고, 임의로 장문 bullet을 추가하지 말 것
 - Problem은 시장 문제, Target은 고객, Channel은 접점/영업, Partner는 관계, Operating은 운영 활동, Value Proposition은 차별 효익, Moat은 경쟁 우위를 드러내는 내용만 써야 함
 - 중앙 중앙(2-2)은 핵심 사업 자체를 나타내는 짧은 키워드를 title로 쓰고, bullet로만 사업 실체를 설명할 것
 - 하단 중앙(3-2)은 돈 흐름이 들어오고 비용이 나가는 재무 주체로 이해되도록 표현할 것
@@ -168,6 +172,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - polished consulting-style ecosystem diagram 으로 보이게 할 것
 - 샘플 전략 다이어그램처럼 넓은 여백, 절제된 아이콘, 작은 텍스트, 선 중심의 구조를 유지할 것
 - 과한 카드 장식, 큰 제목, 큰 아이콘, 만화 같은 스타일, 이모지 스타일을 절대 사용하지 말 것
+- 노드 안에 bullet이 3개 이상 들어가면 실패다
+- title 아래 설명형 두 번째 헤더나 subtitle이 나오면 실패다
 - 노드 설명이 너무 많아서 BMC 이미지처럼 보이면 실패다
 - 화살표가 적거나 짧아서 작동 구조가 안 보이면 실패다
 - 최종 이미지는 '무엇을 팔고, 누구와 연결되며, 돈과 정보와 서비스가 어떻게 움직이는지'를 이해할 수 있어야 한다
@@ -193,10 +199,100 @@ def _join_items(values: List[Any], fallback: str) -> str:
     return ", ".join(items) if items else fallback
 
 
+def _compact_items(values: List[Any], fallback_items: List[str], limit: int = 2) -> List[str]:
+    items: List[str] = []
+    for value in values or []:
+        cleaned = _short_phrase(value)
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+        if len(items) >= limit:
+            break
+    return items or fallback_items[:limit]
+
+
+def _problem_items(bmc_data: Dict[str, Any]) -> List[str]:
+    summary = dict(bmc_data.get("strategic_summary", {}) or {})
+    sources = [
+        summary.get("problem", ""),
+        *(
+            bmc_data.get("business_model_canvas", {}) or {}
+        ).get("customer_relationships", []),
+    ]
+    items: List[str] = []
+    for value in sources:
+        cleaned = _short_phrase(value)
+        if not cleaned or _looks_like_solution_phrase(cleaned):
+            continue
+        if cleaned not in items:
+            items.append(cleaned)
+        if len(items) >= 2:
+            break
+    return items or ["시장 비효율", "기존 대안 한계"]
+
+
+def _company_items(bmc_data: Dict[str, Any], company_name: str) -> List[str]:
+    revenue_streams = _compact_items(
+        (bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", []),
+        fallback_items=["수익 수취"],
+        limit=1,
+    )
+    cost_streams = _compact_items(
+        (bmc_data.get("business_model_canvas", {}) or {}).get("cost_structure", []),
+        fallback_items=["비용 집행"],
+        limit=1,
+    )
+    items = revenue_streams + cost_streams
+    if len(items) < 2 and company_name:
+        items.append("사업 운영")
+    return items[:2]
+
+
+def _short_phrase(value: Any, max_len: int = 12) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    text = (
+        text.replace("시장의 ", "")
+        .replace("핵심 ", "")
+        .replace("고객 ", "")
+        .replace("사용자 ", "")
+        .replace("및 ", "")
+        .replace("/", "·")
+    ).strip(" ,.-")
+    if len(text) <= max_len:
+        return text
+    for sep in [",", "·", "(", ")", " ", "및"]:
+        if sep in text:
+            candidate = clean_korean_label(text.split(sep)[0])
+            if candidate and len(candidate) <= max_len:
+                return candidate
+    return text[:max_len].rstrip()
+
+
+def _looks_like_solution_phrase(text: str) -> bool:
+    return any(
+        token in text
+        for token in ["추천", "서비스", "플랫폼", "지원", "제공", "운영", "프로모션", "커뮤니티", "게임", "데이터"]
+    )
+
+
 def _join_flow_labels(flows: List[Dict[str, str]], fallback: str) -> str:
     labels = []
     for flow in flows or []:
         label = clean_korean_label(flow.get("label", ""))
+        if label and label not in labels:
+            labels.append(label)
+        if len(labels) >= 4:
+            break
+    return ", ".join(labels) if labels else fallback
+
+
+def _join_validated_labels_by_type(validated_flows: List[Dict[str, str]], flow_type: str, fallback: str) -> str:
+    labels = []
+    for flow in validated_flows or []:
+        if flow.get("type") != flow_type:
+            continue
+        label = _short_phrase(flow.get("label", ""), max_len=14)
         if label and label not in labels:
             labels.append(label)
         if len(labels) >= 4:
