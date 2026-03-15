@@ -1,1 +1,1 @@
-"""Renderers for Streamlit and SVG outputs."""
+"""Renderers for Streamlit outputs."""

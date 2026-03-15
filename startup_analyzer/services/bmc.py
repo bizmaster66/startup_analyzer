@@ -247,7 +247,7 @@ def build_bmc_and_diagram_data(
 
 [핵심 목표]
 1. 정식 Business Model Canvas 9블록을 완성한다.
-2. SVG 생태계형 BM 다이어그램에 필요한 노드와 흐름을 만든다.
+2. BM 다이어그램 PNG 생성에 필요한 노드와 흐름을 만든다.
 3. 기업개요 리포트에 넣을 BMC 요약 문단을 작성한다.
 
 [작성 규칙]
