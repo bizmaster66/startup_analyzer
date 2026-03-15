@@ -338,6 +338,8 @@ def _partner_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if any(token in text for token in ["OEM", "ODM"]):
             phrase = "OEM·ODM 제조사"
+        elif archetype == "brand_consumer" and any(token in text for token in ["제조", "생산", "협력사"]):
+            phrase = "화장품 제조 파트너"
         elif any(token in text for token in ["부품", "하드웨어", "제조"]):
             phrase = "로봇 제조 파트너"
         elif any(token in text for token in ["고객사", "운영사", "매장", "리테일"]):
@@ -574,7 +576,7 @@ def _problem_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
     relationship_items = (bmc_data.get("business_model_canvas", {}) or {}).get("customer_relationships", [])
     relationship_items = [
         item for item in relationship_items
-        if not any(token in str(item) for token in ["파트너십", "유지보수", "업그레이드", "데이터 기반", "맞춤형"])
+        if not any(token in str(item) for token in ["파트너십", "유지보수", "업그레이드", "데이터 기반", "맞춤형", "팬덤", "소통", "커뮤니티", "시각적 경험", "피드백", "개인화", "참여 유도", "경험 제안"])
     ]
     sources.extend(relationship_items)
     items: List[str] = []
@@ -647,6 +649,10 @@ def _problem_phrase(value: Any, archetype: str) -> str:
         return "운영 비효율"
     if archetype == "brand_consumer" and "감성" in text and any(token in text for token in ["미흡", "부족", "결여"]):
         return "감성 경험 부족"
+    if archetype == "brand_consumer" and any(token in text for token in ["메이크업 루틴", "메이크업 과정"]):
+        return "메이크업 루틴 복잡성"
+    if archetype == "brand_consumer" and any(token in text for token in ["개성", "자기표현"]) and any(token in text for token in ["한계", "어려움", "부족"]):
+        return "개성 표현 한계"
     if archetype == "brand_consumer" and "직접 바르는" in text and any(token in text for token in ["한계", "부족", "미흡"]):
         return "직접 사용 경험 부재"
     if archetype == "brand_consumer" and any(token in text for token in ["젤 네일", "네일팁", "간편함"]):
@@ -674,8 +680,12 @@ def _value_phrase(value: Any, archetype: str) -> str:
         return "품질 일관성"
     if archetype == "brand_consumer" and ("포스트 걸코어" in text or "브랜드 미학" in text):
         return "브랜드 미학"
+    if archetype == "brand_consumer" and "이사배" in text and any(token in text for token in ["전문성", "노하우"]):
+        return "전문성 집약 제품"
     if archetype == "brand_consumer" and ("감성" in text or "미적 경험" in text):
         return "감성적 사용 경험"
+    if archetype == "brand_consumer" and any(token in text for token in ["개성", "판타지", "자유 표현"]):
+        return "개성 표현 지원"
     if archetype == "brand_consumer" and "프리미엄" in text and any(token in text for token in ["네일", "색조", "뷰티"]):
         return "프리미엄 뷰티"
     if archetype == "robotics_b2b" and ("무인 운영" in text or "24시간" in text):
@@ -711,6 +721,12 @@ def _core_phrase(value: Any, archetype: str) -> str:
         return "서비스 로봇"
     if archetype == "brand_consumer" and "브랜드" in text:
         return "브랜드 플랫폼"
+    if archetype == "brand_consumer" and ("뷰티 솔루션" in text or "뷰티 브랜드" in text):
+        return "뷰티 브랜드"
+    if archetype == "brand_consumer" and any(token in text for token in ["제품 기획", "제품 개발"]):
+        return "뷰티 제품 기획"
+    if archetype == "brand_consumer" and "브랜드 마케팅" in text:
+        return "브랜드 콘텐츠"
     if "플랫폼" in text:
         return "커머스 플랫폼"
     if "추천" in text:
