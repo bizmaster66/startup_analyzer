@@ -35,12 +35,15 @@ def generate_bm_diagram_png(
 def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated_flows: List[Dict[str, str]]) -> str:
     bmc = bmc_data.get("business_model_canvas", {}) or {}
 
-    users = _join_items(bmc.get("customer_segments", []), fallback="핵심 고객")
-    providers = _join_items(bmc.get("key_resources", []), fallback="데이터·기술 공급")
-    partners = _join_items(bmc.get("channels", []), fallback="도입 파트너")
-    consumers = _join_items(bmc.get("key_activities", []), fallback="서비스 활용 주체")
-    infrastructure = _join_items(bmc.get("cost_structure", []), fallback="인프라 파트너")
-    platform = clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
+    market_needs = _join_items(bmc.get("customer_relationships", []), fallback="시장 니즈")
+    target_users = _join_items(bmc.get("customer_segments", []), fallback="핵심 고객")
+    community_channels = _join_items(bmc.get("channels", []), fallback="고객 채널")
+    value_prop = _join_items(bmc.get("value_propositions", []), fallback="제공 가치")
+    core_platform = clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
+    activities = _join_items(bmc.get("key_activities", []), fallback="핵심 활동")
+    partners = _join_items(bmc.get("key_partnerships", []), fallback="핵심 파트너")
+    company = company_name
+    resources = _join_items(bmc.get("key_resources", []), fallback="핵심 자원/경쟁력")
 
     info_flows = _join_flow_labels(bmc_data.get("information_flows", []), fallback="사용 데이터, 도입 정보")
     money_flows = _join_flow_labels(bmc_data.get("money_flows", []), fallback="구독 매출, 제휴 수수료")
@@ -51,29 +54,19 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 한국어 비즈니스 생태계 다이어그램 PNG를 생성하라.
 
 [목표]
-- 컨설팅 슬라이드에 넣을 수준의 깔끔한 business ecosystem diagram
-- 흰색 또는 아주 연한 회색 배경
-- 중심 플랫폼 1개와 주변 주체 5개가 균형 있게 배치된 구조
-- 복잡한 장식 금지, 과한 일러스트 금지
-
-[레이아웃]
-- 상단: Users
-- 중앙: Core Platform
-- 좌측: Providers
-- 우측: Partners
-- 좌하단: Consumers
-- 우하단: Infrastructure
-- 중앙 플랫폼을 기준으로 대칭적이고 안정된 구도
+- 투자자 및 컨설팅 슬라이드에 즉시 넣을 수 있는 전문가 수준의 Business Model Canvas 3x3 다이어그램
+- 복잡한 장식이나 실험적인 플로우차트를 절대 금지하며, 깔끔하고 정돈된 BI 대시보드 형태를 유지할 것
 
 [시각 스타일]
-- rounded rectangle cards
-- 옅은 블루 카드 배경
-- 진한 네이비 텍스트
-- 곡선형 연결선
+- 배경: 흰색 또는 아주 연한 회색
+- 카드: 부드러운 그림자가 있는 rounded rectangle
+- 테마: 옅은 파스텔 블루/그레이 카드 배경, 진한 네이비 텍스트
+- 아이콘: 각 카드 내용을 직관적으로 나타내는 세련된 2D flat vector 아이콘 또는 이모지 1개를 작게 배치
+- 폰트/텍스트: 기존보다 더 작고 컴팩트하게, 현재 수준의 약 50% 체감 크기까지 줄여 여백을 충분히 확보할 것
+- 각 노드는 title 1줄, subtitle 1줄, bullet 2~3개만 포함
 - 정보 흐름은 파란색 + 사각형 마커
 - 돈 흐름은 초록색 + 달러 마커
 - 서비스 흐름은 주황색 + 원형 마커
-- 각 노드는 title, subtitle, bullet 2~3개만 포함
 - 글자는 모두 한국어
 - 전체 화면 비율은 가로형 16:10에 가깝게
 - 하단 중앙에 범례를 반드시 포함
@@ -87,18 +80,26 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 가로형 기준 약 1024px 너비의 선명한 PNG로 생성할 것
 - 저해상도, 흐릿한 텍스트, 압축 artifacts 금지
 
-[콘텐츠]
+[레이아웃 및 배치 (엄격한 3x3 Grid)]
+- 반드시 가로 3칸, 세로 3칸의 균형 잡힌 그리드 구조
+- 상단(이용자 레이어): 좌측[시장 상황 및 니즈], 중앙[타겟 고객], 우측[커뮤니티 및 채널]
+- 중단(사업 레이어): 좌측[제공 가치], 중앙[코어 플랫폼], 우측[핵심 활동]
+- 하단(사업자 레이어): 좌측[핵심 파트너], 중앙[기업 본체], 우측[핵심 자원]
+- 중앙의 코어 플랫폼 카드는 다른 카드보다 약간 크거나 시각적으로 더 돋보이게 처리
+- 별도 메인 타이틀이나 장식성 텍스트는 절대 넣지 말 것
+
+[콘텐츠 주입 데이터 (3x3)]
 - 회사명: {company_name}
 - BM 유형: {clean_korean_label(bmc_data.get("bm_type", ""), fallback="플랫폼형")}
-- Users: {users}
-- Core Platform: {platform}
-- Providers: {providers}
-- Partners: {partners}
-- Consumers: {consumers}
-- Infrastructure: {infrastructure}
-
-[핵심 가치]
-- { _join_items(bmc.get("value_propositions", []), fallback="핵심 가치") }
+- [상단-좌측] 시장/니즈: {market_needs}
+- [상단-중앙] 타겟 고객: {target_users}
+- [상단-우측] 채널/소통: {community_channels}
+- [중단-좌측] 제공 가치: {value_prop}
+- [중단-중앙] 코어 플랫폼: {core_platform}
+- [중단-우측] 핵심 활동: {activities}
+- [하단-좌측] 핵심 파트너: {partners}
+- [하단-중앙] 기업 본체: {company}
+- [하단-우측] 핵심 자원: {resources}
 
 [흐름 라벨]
 - 정보 흐름: {info_flows}
@@ -109,10 +110,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 {validated_flow_lines}
 
 [중요 제약]
-- 텍스트 과밀 금지
 - 카드끼리 겹침 금지
-- 화살표와 라벨 충돌 금지
-- 실험적인 플로우차트처럼 보이면 안 됨
+- 화살표와 라벨이 카드나 글자를 관통하지 않도록 곡선형으로 우회할 것
 - polished consulting-style ecosystem diagram 으로 보이게 할 것
 - 범례 누락 금지
 - 화살표 방향은 반드시 위의 [검증된 화살표 방향]을 그대로 따를 것
@@ -191,49 +190,49 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
 
     if flow_type == "정보":
         if any(token in label for token in ["사용", "요청", "문의", "입력", "행동"]):
-            return {"from": "Users", "to": "Core Platform", "label": label}
+            return {"from": "타겟 고객", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["도입", "리드", "채널", "영업"]):
-            return {"from": "Partners", "to": "Core Platform", "label": label}
+            return {"from": "커뮤니티 및 채널", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["모델", "원천", "기술", "데이터", "API", "연동"]) or any(
             token in label for token in ["모델", "원천", "기술", "데이터"]
         ):
-            return {"from": "Providers", "to": "Core Platform", "label": label}
+            return {"from": "핵심 자원", "to": "코어 플랫폼", "label": label}
         return None
 
     if flow_type == "돈":
         if any(token in label for token in ["인프라", "클라우드", "호스팅", "서버"]):
-            return {"from": "Core Platform", "to": "Infrastructure", "label": label}
+            return {"from": "기업 본체", "to": "핵심 자원", "label": label}
         if any(token in label for token in ["모델", "데이터", "라이선스"]):
-            return {"from": "Core Platform", "to": "Providers", "label": label}
+            return {"from": "기업 본체", "to": "핵심 파트너", "label": label}
         if any(token in label for token in ["제휴", "리셀", "채널", "도입", "파트너"]) and any(
             token in revenue_text + channel_text + relation_text for token in ["수수료", "제휴", "리셀", "도입", "파트너"]
         ):
-            return {"from": "Partners", "to": "Core Platform", "label": label}
+            return {"from": "커뮤니티 및 채널", "to": "기업 본체", "label": label}
         if any(token in label for token in ["구독", "이용", "사용", "멤버십", "가입"]) or any(
             token in revenue_text for token in ["구독", "이용", "멤버십", "가입", "사용료"]
         ):
-            return {"from": "Users", "to": "Core Platform", "label": label}
+            return {"from": "타겟 고객", "to": "기업 본체", "label": label}
         if "수수료" in label and "파트너" not in revenue_text + channel_text + relation_text:
-            return {"from": "Users", "to": "Core Platform", "label": label}
+            return {"from": "타겟 고객", "to": "기업 본체", "label": label}
         if any(token in cost_text for token in ["인프라", "클라우드"]) and "비용" in label:
-            return {"from": "Core Platform", "to": "Infrastructure", "label": label}
+            return {"from": "기업 본체", "to": "핵심 자원", "label": label}
         if any(token in cost_text for token in ["모델", "데이터", "라이선스"]) and "비용" in label:
-            return {"from": "Core Platform", "to": "Providers", "label": label}
+            return {"from": "기업 본체", "to": "핵심 파트너", "label": label}
         return None
 
     if flow_type == "서비스":
         if any(token in label for token in ["인프라", "클라우드", "호스팅", "서버"]):
-            return {"from": "Infrastructure", "to": "Core Platform", "label": label}
+            return {"from": "핵심 자원", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["솔루션", "도입", "채널", "영업", "제휴"]):
-            return {"from": "Core Platform", "to": "Partners", "label": label}
+            return {"from": "코어 플랫폼", "to": "커뮤니티 및 채널", "label": label}
         if any(token in label for token in ["API", "연동"]) and "도입" not in label:
-            return {"from": "Core Platform", "to": "Consumers", "label": label}
+            return {"from": "코어 플랫폼", "to": "핵심 활동", "label": label}
         if any(token in label for token in ["기술", "모델", "데이터", "원천"]):
-            return {"from": "Providers", "to": "Core Platform", "label": label}
+            return {"from": "핵심 파트너", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["보안", "분석", "탐지", "결과", "추천", "대응", "서비스"]) and not any(
             token in label for token in ["인프라", "연동", "API", "도입", "제휴"]
         ):
-            return {"from": "Core Platform", "to": "Users", "label": label}
+            return {"from": "코어 플랫폼", "to": "타겟 고객", "label": label}
         return None
 
     return None
@@ -260,12 +259,15 @@ def _repair_ambiguous_flows_with_model(
 최종 role-based flow 목록만 JSON으로 출력하라.
 
 [허용 role]
-- Users
-- Core Platform
-- Providers
-- Partners
-- Consumers
-- Infrastructure
+- 시장 상황 및 니즈
+- 타겟 고객
+- 커뮤니티 및 채널
+- 제공 가치
+- 코어 플랫폼
+- 핵심 활동
+- 핵심 파트너
+- 기업 본체
+- 핵심 자원
 
 [판단 우선순위]
 1. business_model_canvas
@@ -328,7 +330,7 @@ def _dedupe_role_flows(flows: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 def _format_validated_flows(flows: List[Dict[str, str]]) -> str:
     if not flows:
-        return "- 정보: Users -> Core Platform : 사용 데이터"
+        return "- 정보: 타겟 고객 -> 코어 플랫폼 : 사용 데이터"
     return "\n".join(f'- {flow["type"]}: {flow["from"]} -> {flow["to"]} : {flow["label"]}' for flow in flows[:8])
 
 
