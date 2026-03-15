@@ -83,6 +83,9 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 범례는 다이어그램 본체와 겹치지 않게 하단 여백에 배치할 것
 - 별도 메인 타이틀이나 상단 제목 텍스트를 넣지 말 것
 - 회사명으로 만든 장식성 제목, 따옴표 제목, 부정확한 헤더 문구를 넣지 말 것
+- 출력 해상도는 1k급으로 생성할 것
+- 가로형 기준 약 1024px 너비의 선명한 PNG로 생성할 것
+- 저해상도, 흐릿한 텍스트, 압축 artifacts 금지
 
 [콘텐츠]
 - 회사명: {company_name}
