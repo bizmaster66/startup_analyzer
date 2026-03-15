@@ -18,7 +18,8 @@ def generate_bm_diagram_png(
     bmc_data: Dict[str, Any],
 ) -> bytes:
     validated_flows = _validate_role_flows(client, company_name, bmc_data)
-    prompt = _build_diagram_prompt(company_name, bmc_data, validated_flows)
+    node_specs = _prepare_node_specs(client, company_name, bmc_data)
+    prompt = _build_diagram_prompt(company_name, bmc_data, validated_flows, node_specs)
     response = client.models.generate_content(
         model=IMAGE_MODEL,
         contents=[prompt],
@@ -32,24 +33,19 @@ def generate_bm_diagram_png(
     raise ValueError("Gemini 이미지 생성 응답에서 PNG 데이터를 찾지 못했습니다.")
 
 
-def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated_flows: List[Dict[str, str]]) -> str:
+def _build_diagram_prompt(
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    validated_flows: List[Dict[str, str]],
+    node_specs: Dict[str, Dict[str, Any]],
+) -> str:
     bmc = bmc_data.get("business_model_canvas", {}) or {}
-
-    problem_items = _problem_items(bmc_data)
-    target_items = _compact_items(bmc.get("customer_segments", []), fallback_items=["핵심 고객"])
-    channel_items = _compact_items(bmc.get("channels", []), fallback_items=["고객 접점"])
-    partner_items = _compact_items(bmc.get("key_partnerships", []), fallback_items=["핵심 파트너"])
-    core_platform = clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
-    operating_items = _compact_items(bmc.get("key_activities", []), fallback_items=["핵심 운영"])
-    value_items = _compact_items(bmc.get("value_propositions", []), fallback_items=["차별 효익"])
-    company = company_name
-    company_items = _company_items(bmc_data, company_name)
-    moat_items = _compact_items(bmc.get("key_resources", []), fallback_items=["핵심 자원"])
 
     info_flows = _join_validated_labels_by_type(validated_flows, "정보", fallback="사용 데이터, 요청 정보")
     money_flows = _join_validated_labels_by_type(validated_flows, "돈", fallback="구독료, 수수료")
     service_flows = _join_validated_labels_by_type(validated_flows, "서비스", fallback="핵심 서비스, 플랫폼 운영")
     validated_flow_lines = _format_validated_flows(validated_flows)
+    node_spec_lines = _format_node_specs(node_specs)
 
     return f"""
 한국어 비즈니스 생태계 다이어그램 PNG를 생성하라.
@@ -120,16 +116,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 [콘텐츠 주입 데이터 (3x3)]
 - 회사명: {company_name}
 - BM 유형: {clean_korean_label(bmc_data.get("bm_type", ""), fallback="플랫폼형")}
-- [상단-좌측 Problem] 시장 문제 bullet: {", ".join(problem_items)}
-- [상단-중앙 Target] 핵심 고객 bullet: {", ".join(target_items)}
-- [상단-우측 Channel] 고객 접점/영업 bullet: {", ".join(channel_items)}
-- [중단-좌측 Partner] 파트너 관계 bullet: {", ".join(partner_items)}
-- [중단-중앙 Core] 핵심 사업 키워드: {core_platform}
-- [중단-우측 Operating] 핵심 활동 bullet: {", ".join(operating_items)}
-- [하단-좌측 Value Proposition] 차별적 효익 bullet: {", ".join(value_items)}
-- [하단-중앙 Company] 실제 기업명: {company}
-- [하단-중앙 Company] 운영/재무 주체 bullet: {", ".join(company_items)}
-- [하단-우측 Moat] 핵심 자원/경쟁력 bullet: {", ".join(moat_items)}
+- 아래 node spec을 그대로 사용하고, generic placeholder 문구로 바꾸지 말 것
+{node_spec_lines}
 
 [노드 텍스트 작성 방식]
 - 3x3 각 칸의 title은 위에서 지정한 영문 title을 반드시 그대로 사용할 것. 단, 중앙 중앙(2-2)만 예외적으로 핵심 사업 키워드를 title로 사용
@@ -141,6 +129,8 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 각 노드의 bullet은 동사형 문장보다 제품 기능, 운영 요소, 고객 특성, 파트너 기능처럼 업무적으로 읽히는 키워드 중심으로 작성할 것
 - 각 노드의 bullet은 한 항목당 10자 내외의 짧은 표현을 우선하고, 장문 서술형 문장은 금지할 것
 - 각 노드는 위 [콘텐츠 주입 데이터]에서 준 bullet만 사용하고, 임의로 장문 bullet을 추가하지 말 것
+- "시장의 핵심 문제와 미충족 수요", "핵심 고객 및 사용자", "기업과 고객의 접점 및 영업 방식", "기업과의 관계", "핵심 사업 수행을 위한 운영 활동", "핵심 자원과 경쟁력" 같은 템플릿 문구를 bullet로 다시 쓰지 말 것
+- "core business keyword", "platform business", "기업 본체" 같은 메타 표현이나 placeholder 표현을 절대 출력하지 말 것
 - Problem은 시장 문제, Target은 고객, Channel은 접점/영업, Partner는 관계, Operating은 운영 활동, Value Proposition은 차별 효익, Moat은 경쟁 우위를 드러내는 내용만 써야 함
 - 중앙 중앙(2-2)은 핵심 사업 자체를 나타내는 짧은 키워드를 title로 쓰고, bullet로만 사업 실체를 설명할 것
 - 하단 중앙(3-2)은 돈 흐름이 들어오고 비용이 나가는 재무 주체로 이해되도록 표현할 것
@@ -174,6 +164,7 @@ def _build_diagram_prompt(company_name: str, bmc_data: Dict[str, Any], validated
 - 과한 카드 장식, 큰 제목, 큰 아이콘, 만화 같은 스타일, 이모지 스타일을 절대 사용하지 말 것
 - 노드 안에 bullet이 3개 이상 들어가면 실패다
 - title 아래 설명형 두 번째 헤더나 subtitle이 나오면 실패다
+- node spec의 실제 내용을 무시하고 generic bullet로 대체하면 실패다
 - 노드 설명이 너무 많아서 BMC 이미지처럼 보이면 실패다
 - 화살표가 적거나 짧아서 작동 구조가 안 보이면 실패다
 - 최종 이미지는 '무엇을 팔고, 누구와 연결되며, 돈과 정보와 서비스가 어떻게 움직이는지'를 이해할 수 있어야 한다
@@ -197,6 +188,202 @@ def _join_items(values: List[Any], fallback: str) -> str:
         if len(items) >= 3:
             break
     return ", ".join(items) if items else fallback
+
+
+def _prepare_node_specs(client: genai.Client, company_name: str, bmc_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    specs = _build_default_node_specs(company_name, bmc_data)
+    if _needs_node_spec_repair(specs):
+        repaired = _repair_node_specs_with_model(client, company_name, bmc_data, specs)
+        if repaired:
+            specs = repaired
+    return specs
+
+
+def _build_default_node_specs(company_name: str, bmc_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    bmc = bmc_data.get("business_model_canvas", {}) or {}
+    return {
+        "problem": {"title": "Problem", "bullets": _problem_items(bmc_data)},
+        "target": {"title": "Target", "bullets": _compact_items(bmc.get("customer_segments", []), fallback_items=["핵심 고객"])},
+        "channel": {"title": "Channel", "bullets": _compact_items(bmc.get("channels", []), fallback_items=["고객 접점"])},
+        "partner": {"title": "Partner", "bullets": _compact_items(bmc.get("key_partnerships", []), fallback_items=["핵심 파트너"])},
+        "core": {
+            "title": clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼"),
+            "bullets": _core_items(bmc_data),
+        },
+        "operating": {"title": "Operating", "bullets": _compact_items(bmc.get("key_activities", []), fallback_items=["핵심 운영"])},
+        "value": {"title": "Value Proposition", "bullets": _value_items(bmc_data)},
+        "company": {"title": company_name, "bullets": _company_items(bmc_data, company_name)},
+        "moat": {"title": "Moat", "bullets": _compact_items(bmc.get("key_resources", []), fallback_items=["핵심 자원"])},
+    }
+
+
+def _core_items(bmc_data: Dict[str, Any]) -> List[str]:
+    bmc = bmc_data.get("business_model_canvas", {}) or {}
+    candidates: List[str] = []
+    for value in bmc.get("value_propositions", []):
+        phrase = _core_phrase(value)
+        if phrase and phrase not in candidates:
+            candidates.append(phrase)
+        if len(candidates) >= 1:
+            break
+    for value in bmc.get("key_activities", []):
+        phrase = _core_phrase(value)
+        if phrase and phrase not in candidates:
+            candidates.append(phrase)
+        if len(candidates) >= 2:
+            break
+    items: List[str] = []
+    for value in candidates:
+        cleaned = _short_phrase(value, max_len=12)
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+        if len(items) >= 2:
+            break
+    return items or ["핵심 서비스"]
+
+
+def _value_items(bmc_data: Dict[str, Any]) -> List[str]:
+    bmc = bmc_data.get("business_model_canvas", {}) or {}
+    items: List[str] = []
+    for value in bmc.get("value_propositions", []):
+        phrase = _value_phrase(value)
+        if phrase and phrase not in items:
+            items.append(phrase)
+        if len(items) >= 2:
+            break
+    return items or ["차별 효익"]
+
+
+def _needs_node_spec_repair(specs: Dict[str, Dict[str, Any]]) -> bool:
+    generic_bullets = {
+        "시장의 핵심 문제와 미충족 수요",
+        "핵심 고객 및 사용자",
+        "기업과 고객의 접점 및 영업 방식",
+        "기업과의 관계",
+        "핵심 사업 수행을 위한 운영 활동",
+        "핵심 자원과 경쟁력",
+    }
+    banned_terms = {"core business keyword", "platform business", "기업 본체"}
+    for key, spec in specs.items():
+        title = clean_korean_label(spec.get("title", ""))
+        bullets = [clean_korean_label(x) for x in spec.get("bullets", []) if clean_korean_label(x)]
+        if not title or len(bullets) == 0:
+            return True
+        if len(bullets) > 2:
+            return True
+        if any(term in title for term in banned_terms):
+            return True
+        if any(term in bullet for term in banned_terms for bullet in bullets):
+            return True
+        if any(bullet in generic_bullets for bullet in bullets):
+            return True
+        if any(bullet in {"합리적", "탐색", "기존", "소비자", "고객"} for bullet in bullets):
+            return True
+        if key == "problem" and any(bullet in {"기존", "소비자", "고객"} for bullet in bullets):
+            return True
+    return False
+
+
+def _repair_node_specs_with_model(
+    client: genai.Client,
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    specs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    schema_hint = """
+{
+  "problem": {"title": "Problem", "bullets": ["", ""]},
+  "target": {"title": "Target", "bullets": ["", ""]},
+  "channel": {"title": "Channel", "bullets": ["", ""]},
+  "partner": {"title": "Partner", "bullets": ["", ""]},
+  "core": {"title": "", "bullets": ["", ""]},
+  "operating": {"title": "Operating", "bullets": ["", ""]},
+  "value": {"title": "Value Proposition", "bullets": ["", ""]},
+  "company": {"title": "", "bullets": ["", ""]},
+  "moat": {"title": "Moat", "bullets": ["", ""]}
+}
+""".strip()
+    prompt = f"""
+당신은 투자자용 비즈니스 다이어그램 편집자이다.
+
+아래 3x3 노드 초안을 더 짧고 구체적인 node spec으로 교정하라.
+
+[목표]
+- generic placeholder 문구를 제거
+- 각 노드는 bullet 1~2개만 유지
+- bullet은 짧은 명사구로 작성
+- Problem은 시장 pain, Value Proposition은 차별 효익, Moat은 경쟁우위, Company는 수익/비용 주체를 드러낼 것
+- 중앙 core title은 실제 핵심 사업 키워드여야 하며 영어 placeholder 금지
+
+[회사명]
+{company_name}
+
+[현재 초안]
+{json.dumps(specs, ensure_ascii=False, indent=2)}
+
+[BMC 데이터]
+{json.dumps(bmc_data, ensure_ascii=False, indent=2)}
+
+[금지]
+- "시장의 핵심 문제와 미충족 수요"
+- "핵심 고객 및 사용자"
+- "기업과 고객의 접점 및 영업 방식"
+- "기업과의 관계"
+- "핵심 사업 수행을 위한 운영 활동"
+- "핵심 자원과 경쟁력"
+- "core business keyword"
+- "platform business"
+- "기업 본체"
+
+[출력 규칙]
+- JSON ONLY
+- title은 지정된 영어 타이틀 유지. 단 core는 실제 핵심 사업 키워드, company는 실제 기업명 사용
+- bullets는 1~2개
+- 모든 bullet은 12자 이내를 우선
+
+[출력 스키마]
+{schema_hint}
+"""
+    response = client.models.generate_content(
+        model=TEXT_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="text/plain"),
+    )
+    raw_text = (response.text or "").strip()
+    try:
+        data = extract_json(raw_text)
+    except Exception:
+        repaired = repair_json_with_model(client, TEXT_MODEL, raw_text, schema_hint=schema_hint)
+        data = extract_json(repaired)
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for key, default in _build_default_node_specs(company_name, bmc_data).items():
+        spec = dict(data.get(key, {}) or {})
+        title = clean_korean_label(spec.get("title", ""), fallback=default["title"])
+        bullets = _compact_items(spec.get("bullets", []), fallback_items=default["bullets"], limit=2)
+        normalized[key] = {"title": title, "bullets": bullets}
+    return normalized
+
+
+def _format_node_specs(specs: Dict[str, Dict[str, Any]]) -> str:
+    order = [
+        ("problem", "상단-좌측 Problem"),
+        ("target", "상단-중앙 Target"),
+        ("channel", "상단-우측 Channel"),
+        ("partner", "중단-좌측 Partner"),
+        ("core", "중단-중앙 Core"),
+        ("operating", "중단-우측 Operating"),
+        ("value", "하단-좌측 Value Proposition"),
+        ("company", "하단-중앙 Company"),
+        ("moat", "하단-우측 Moat"),
+    ]
+    lines = []
+    for key, label in order:
+        spec = specs.get(key, {})
+        title = clean_korean_label(spec.get("title", ""))
+        bullets = [clean_korean_label(x) for x in spec.get("bullets", []) if clean_korean_label(x)]
+        bullet_text = ", ".join(bullets[:2]) if bullets else "-"
+        lines.append(f"- [{label}] title: {title} / bullets: {bullet_text}")
+    return "\n".join(lines)
 
 
 def _compact_items(values: List[Any], fallback_items: List[str], limit: int = 2) -> List[str]:
@@ -286,6 +473,42 @@ def _problem_phrase(value: Any) -> str:
         candidate = _short_phrase(chunk, max_len=14)
         if candidate and candidate not in {"기존", "소비자", "고객", "커머스"} and not _looks_like_solution_phrase(candidate):
             return candidate
+    return _short_phrase(text, max_len=14)
+
+
+def _value_phrase(value: Any) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if "불확실성" in text:
+        return "불확실성 해소"
+    if "신뢰" in text:
+        return "가격 신뢰 제공"
+    if "앱테크" in text:
+        return "앱테크 결합"
+    if "저렴" in text or "합리적 가격" in text:
+        return "합리적 가격"
+    if "탐색" in text or "비교" in text:
+        return "탐색 부담 완화"
+    return _short_phrase(text, max_len=14)
+
+
+def _core_phrase(value: Any) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if any(token in text for token in ["합리적 가격", "저렴", "신뢰", "불확실성", "탐색", "비교"]):
+        return ""
+    if "플랫폼" in text:
+        return "커머스 플랫폼"
+    if "추천" in text:
+        return "추천 엔진"
+    if "직거래" in text:
+        return "직거래 구조"
+    if "개발 운영" in text:
+        return "플랫폼 운영"
+    if "판매자 유치" in text:
+        return "판매자 네트워크"
     return _short_phrase(text, max_len=14)
 
 
