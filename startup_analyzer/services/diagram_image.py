@@ -212,15 +212,11 @@ def _compact_items(values: List[Any], fallback_items: List[str], limit: int = 2)
 
 def _problem_items(bmc_data: Dict[str, Any]) -> List[str]:
     summary = dict(bmc_data.get("strategic_summary", {}) or {})
-    sources = [
-        summary.get("problem", ""),
-        *(
-            bmc_data.get("business_model_canvas", {}) or {}
-        ).get("customer_relationships", []),
-    ]
+    sources = [summary.get("problem", ""), summary.get("status_quo", "")]
+    sources.extend(((bmc_data.get("business_model_canvas", {}) or {}).get("customer_relationships", [])))
     items: List[str] = []
     for value in sources:
-        cleaned = _short_phrase(value)
+        cleaned = _problem_phrase(value)
         if not cleaned or _looks_like_solution_phrase(cleaned):
             continue
         if cleaned not in items:
@@ -231,16 +227,10 @@ def _problem_items(bmc_data: Dict[str, Any]) -> List[str]:
 
 
 def _company_items(bmc_data: Dict[str, Any], company_name: str) -> List[str]:
-    revenue_streams = _compact_items(
-        (bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", []),
-        fallback_items=["수익 수취"],
-        limit=1,
-    )
-    cost_streams = _compact_items(
-        (bmc_data.get("business_model_canvas", {}) or {}).get("cost_structure", []),
-        fallback_items=["비용 집행"],
-        limit=1,
-    )
+    revenue_streams = [_financial_phrase(x, revenue=True) for x in (bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", [])]
+    revenue_streams = [x for x in revenue_streams if x][:1] or ["수익 수취"]
+    cost_streams = [_financial_phrase(x, revenue=False) for x in (bmc_data.get("business_model_canvas", {}) or {}).get("cost_structure", [])]
+    cost_streams = [x for x in cost_streams if x][:1] or ["비용 집행"]
     items = revenue_streams + cost_streams
     if len(items) < 2 and company_name:
         items.append("사업 운영")
@@ -267,6 +257,61 @@ def _short_phrase(value: Any, max_len: int = 12) -> str:
             if candidate and len(candidate) <= max_len:
                 return candidate
     return text[:max_len].rstrip()
+
+
+def _problem_phrase(value: Any) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    text = (
+        text.replace("소비자는 ", "")
+        .replace("고객은 ", "")
+        .replace("소비자가 ", "")
+        .replace("고객이 ", "")
+        .replace("과정에서 ", "")
+        .replace("겪습니다", "")
+        .replace("느낍니다", "")
+        .replace("원한다", "")
+        .replace("원합니다", "")
+        .replace("당연하게 여깁니다", "")
+    )
+    for keyword in ["불확실성", "비교 피로", "탐색 피로", "가격 불신", "신뢰 부족", "검색 비용", "선택 어려움"]:
+        if keyword in text:
+            return keyword
+    if "검색" in text and "비교" in text:
+        return "검색·비교 피로"
+    if "가격" in text and any(token in text for token in ["신뢰", "의심", "불신"]):
+        return "가격 신뢰 부족"
+    for chunk in [x.strip() for x in text.replace("와 같은", ",").replace("로 인해", ",").split(",")]:
+        candidate = _short_phrase(chunk, max_len=14)
+        if candidate and candidate not in {"기존", "소비자", "고객", "커머스"} and not _looks_like_solution_phrase(candidate):
+            return candidate
+    return _short_phrase(text, max_len=14)
+
+
+def _financial_phrase(value: Any, revenue: bool) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if revenue:
+        if "수수료" in text:
+            return "수수료 수취"
+        if "광고" in text:
+            return "광고 수익"
+        if "구독" in text:
+            return "구독 매출"
+        if "라이선스" in text:
+            return "라이선스 매출"
+        return "수익 수취"
+    if any(token in text for token in ["개발", "운영", "인건비"]):
+        return "운영비 집행"
+    if any(token in text for token in ["결제", "정산", "PG"]):
+        return "결제비 집행"
+    if any(token in text for token in ["마케팅", "광고"]):
+        return "마케팅비 집행"
+    if any(token in text for token in ["인프라", "클라우드", "서버"]):
+        return "인프라비 집행"
+    return "비용 집행"
 
 
 def _looks_like_solution_phrase(text: str) -> bool:
@@ -309,8 +354,8 @@ def _validate_role_flows(
     if ambiguous_flows:
         repaired = _repair_ambiguous_flows_with_model(client, company_name, bmc_data, draft_flows, ambiguous_flows)
         if repaired:
-            return repaired[:8]
-    return draft_flows[:8]
+            return _balanced_role_flows(repaired)
+    return _balanced_role_flows(draft_flows)
 
 
 def _build_rule_based_role_flows(bmc_data: Dict[str, Any]) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
@@ -333,7 +378,7 @@ def _build_rule_based_role_flows(bmc_data: Dict[str, Any]) -> tuple[List[Dict[st
                 ambiguous.append({"type": flow_type, "label": label})
 
     flows = _dedupe_role_flows(flows)
-    return flows[:8], ambiguous[:6]
+    return flows, ambiguous[:6]
 
 
 def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
@@ -348,6 +393,8 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
     if flow_type == "정보":
         if any(token in label for token in ["사용", "요청", "문의", "입력", "행동"]):
             return {"from": "타겟 고객", "to": "코어 플랫폼", "label": label}
+        if any(token in label for token in ["공급", "상품", "재고", "판매", "셀러"]):
+            return {"from": "핵심 파트너", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["도입", "리드", "채널", "영업"]):
             return {"from": "커뮤니티 및 채널", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["모델", "원천", "기술", "데이터", "API", "연동"]) or any(
@@ -357,6 +404,10 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
         return None
 
     if flow_type == "돈":
+        if any(token in label for token in ["결제", "PG", "정산"]):
+            return {"from": "기업 본체", "to": "핵심 파트너", "label": label}
+        if any(token in label for token in ["마케팅", "광고"]) and "비용" in label:
+            return {"from": "기업 본체", "to": "커뮤니티 및 채널", "label": label}
         if any(token in label for token in ["인프라", "클라우드", "호스팅", "서버"]):
             return {"from": "기업 본체", "to": "핵심 자원", "label": label}
         if any(token in label for token in ["모델", "데이터", "라이선스"]):
@@ -380,10 +431,12 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
     if flow_type == "서비스":
         if any(token in label for token in ["인프라", "클라우드", "호스팅", "서버"]):
             return {"from": "핵심 자원", "to": "코어 플랫폼", "label": label}
+        if any(token in label for token in ["공급", "입점", "상품", "판매자", "셀러"]):
+            return {"from": "핵심 파트너", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["솔루션", "도입", "채널", "영업", "제휴"]):
             return {"from": "코어 플랫폼", "to": "커뮤니티 및 채널", "label": label}
         if any(token in label for token in ["API", "연동"]) and "도입" not in label:
-            return {"from": "코어 플랫폼", "to": "핵심 활동", "label": label}
+            return {"from": "핵심 파트너", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["기술", "모델", "데이터", "원천"]):
             return {"from": "핵심 파트너", "to": "코어 플랫폼", "label": label}
         if any(token in label for token in ["보안", "분석", "탐지", "결과", "추천", "대응", "서비스"]) and not any(
@@ -483,6 +536,28 @@ def _dedupe_role_flows(flows: List[Dict[str, str]]) -> List[Dict[str, str]]:
         seen.add(key)
         deduped.append(flow)
     return deduped
+
+
+def _balanced_role_flows(flows: List[Dict[str, str]], limit: int = 8) -> List[Dict[str, str]]:
+    deduped = _dedupe_role_flows(flows)
+    groups = {
+        "정보": [flow for flow in deduped if flow.get("type") == "정보"],
+        "돈": [flow for flow in deduped if flow.get("type") == "돈"],
+        "서비스": [flow for flow in deduped if flow.get("type") == "서비스"],
+    }
+    selected: List[Dict[str, str]] = []
+    # First pass: keep up to 2 from each type so one category does not starve others.
+    for flow_type in ["정보", "돈", "서비스"]:
+        selected.extend(groups[flow_type][:2])
+    if len(selected) < limit:
+        leftovers: List[Dict[str, str]] = []
+        for flow_type in ["서비스", "정보", "돈"]:
+            leftovers.extend(groups[flow_type][2:])
+        for flow in leftovers:
+            if len(selected) >= limit:
+                break
+            selected.append(flow)
+    return selected[:limit]
 
 
 def _format_validated_flows(flows: List[Dict[str, str]]) -> str:
