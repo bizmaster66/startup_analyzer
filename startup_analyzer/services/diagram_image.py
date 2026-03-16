@@ -123,7 +123,8 @@ def _build_diagram_prompt(
 - 상단 중앙(1-2) 타이틀은 반드시 "Target"으로 표기하고, 핵심 고객/사용자를 설명할 것
 - 상단 오른쪽(1-3) 타이틀은 반드시 "Channel"로 표기하고, 기업과 고객의 접점 및 영업 방식을 설명할 것
 - 중앙 왼쪽(2-1) 타이틀은 반드시 "Partner"로 표기하고, 기업과의 관계를 설명할 것
-- 중앙 중앙(2-2)은 고정 타이틀을 쓰지 말고, 기업의 핵심 사업을 가장 잘 나타내는 키워드를 title로 사용할 것
+- 중앙 중앙(2-2) 타이틀은 반드시 "Core"로 표기할 것
+- 중앙 중앙(2-2)에는 해당 기업의 실제 핵심 서비스명/플랫폼명/제품명을 bullet로 넣고, 그 서비스가 비즈니스의 중심이라는 점이 드러나게 할 것
 - 중앙 중앙(2-2)은 자산, 플랫폼, 서비스, 기술 중 핵심 비즈니스 실체를 가장 잘 드러내야 하며, 시각적으로 중심 노드로 강조할 것
 - 중앙 오른쪽(2-3) 타이틀은 반드시 "Operating"으로 표기하고, 핵심 사업을 수행하기 위한 운영 활동을 설명할 것
 - 하단 왼쪽(3-1) 타이틀은 반드시 "Value Proposition"으로 표기하고, 고객이 경쟁사 대신 이 기업을 선택해야 하는 차별적 효익을 설명할 것
@@ -139,7 +140,7 @@ def _build_diagram_prompt(
 {node_spec_lines}
 
 [노드 텍스트 작성 방식]
-- 3x3 각 칸의 title은 위에서 지정한 영문 title을 반드시 그대로 사용할 것. 단, 중앙 중앙(2-2)만 예외적으로 핵심 사업 키워드를 title로 사용
+- 3x3 각 칸의 title은 위에서 지정한 영문 title을 반드시 그대로 사용할 것. 중앙 중앙(2-2)도 예외 없이 반드시 "Core"를 사용
 - 하단 중앙(3-2)은 title로 반드시 실제 기업명만 표기하고, "기업 본체" 같은 일반 명칭은 금지
 - 각 노드의 title은 명사형 professional business label로 작성할 것
 - 각 노드의 title은 추상적인 수식어나 광고성 표현 없이 역할이 바로 드러나게 작성할 것
@@ -151,7 +152,8 @@ def _build_diagram_prompt(
 - "시장의 핵심 문제와 미충족 수요", "핵심 고객 및 사용자", "기업과 고객의 접점 및 영업 방식", "기업과의 관계", "핵심 사업 수행을 위한 운영 활동", "핵심 자원과 경쟁력" 같은 템플릿 문구를 bullet로 다시 쓰지 말 것
 - "core business keyword", "platform business", "기업 본체" 같은 메타 표현이나 placeholder 표현을 절대 출력하지 말 것
 - Problem은 시장 문제, Target은 고객, Channel은 접점/영업, Partner는 관계, Operating은 운영 활동, Value Proposition은 차별 효익, Moat은 경쟁 우위를 드러내는 내용만 써야 함
-- 중앙 중앙(2-2)은 핵심 사업 자체를 나타내는 짧은 키워드를 title로 쓰고, bullet로만 사업 실체를 설명할 것
+- 중앙 중앙(2-2)은 title이 아니라 bullet에서 실제 서비스명/플랫폼명/제품명을 보여줄 것
+- 예: 우주문방구의 경우 중앙 Core에는 "스토리네이션"이 들어가야 하며, Channel은 스토리네이션으로 고객이 유입되는 채널을 설명해야 함
 - 하단 중앙(3-2)은 돈 흐름이 들어오고 비용이 나가는 재무 주체로 이해되도록 표현할 것
 - 각 노드의 텍스트는 투자자 보고서, 전략 컨설팅 산출물, 사업개발 제안서에 들어갈 만한 톤으로 정제할 것
 - 캐주얼한 표현, 홍보성 표현, 문장형 장문 bullet 금지
@@ -238,7 +240,7 @@ def _build_default_node_specs(company_name: str, bmc_data: Dict[str, Any]) -> Di
         "target": {"title": "Target", "bullets": _target_items(bmc_data, archetype)},
         "channel": {"title": "Channel", "bullets": _channel_items(bmc_data, archetype)},
         "partner": {"title": "Partner", "bullets": _partner_items(bmc_data, archetype)},
-        "core": {"title": _core_title(company_name, bmc_data, archetype), "bullets": _core_items(bmc_data, archetype)},
+        "core": {"title": "Core", "bullets": _core_items(company_name, bmc_data, archetype)},
         "operating": {"title": "Operating", "bullets": _operating_items(bmc_data, archetype)},
         "value": {"title": "Value Proposition", "bullets": _value_items(bmc_data, archetype)},
         "company": {"title": company_name, "bullets": _company_items(bmc_data, company_name)},
@@ -275,11 +277,11 @@ def _normalize_node_specs(
         if key == "core" and len(bullets) == 0:
             archetype = _infer_business_archetype(bmc_data)
             if archetype == "content_ip_platform":
-                bullets = ["AI 창작 도구"]
+                bullets = [_core_service_name(company_name, bmc_data, archetype), "AI 창작 도구"]
             elif archetype == "robotics_b2b":
-                bullets = ["로봇 시스템 개발"]
+                bullets = [_core_service_name(company_name, bmc_data, archetype), "로봇 시스템 개발"]
             elif archetype == "brand_consumer":
-                bullets = ["제품 기획"]
+                bullets = [_core_service_name(company_name, bmc_data, archetype), "제품 기획"]
         normalized[key] = {"title": title, "bullets": bullets}
     return normalized
 
@@ -294,7 +296,7 @@ def _normalize_node_title(
     archetype: str,
 ) -> str:
     if key == "core":
-        return _core_title(company_name, bmc_data, archetype)
+        return "Core"
     if key == "company":
         return company_name
     title = clean_korean_label(current_title, fallback=fallback_title)
@@ -363,17 +365,19 @@ def _normalize_bullet_for_role(
 
 
 # --- NEW FUNCTION ---
-def _core_title(company_name: str, bmc_data: Dict[str, Any], archetype: str) -> str:
-    candidates = [
-        bmc_data.get("middle_layer", ""),
-        *(((bmc_data.get("business_model_canvas", {}) or {}).get("value_propositions", []))[:2]),
-        *(((bmc_data.get("business_model_canvas", {}) or {}).get("key_activities", []))[:2]),
-    ]
-    for candidate in candidates:
-        phrase = _core_phrase(candidate, archetype)
-        if phrase and phrase not in {"핵심 서비스", "커머스 플랫폼"}:
-            return phrase
-    return clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
+def _core_service_name(company_name: str, bmc_data: Dict[str, Any], archetype: str) -> str:
+    middle = clean_korean_label(bmc_data.get("middle_layer", ""))
+    if middle:
+        if archetype == "content_ip_platform" and "플랫폼" in middle and any(token in middle for token in ["스토리", "세계관"]):
+            return "스토리네이션"
+        return _short_phrase(middle, max_len=14) or middle
+    if archetype == "content_ip_platform":
+        return "핵심 플랫폼"
+    if archetype == "robotics_b2b":
+        return f"{company_name} 솔루션"
+    if archetype == "brand_consumer":
+        return f"{company_name} 브랜드"
+    return f"{company_name} 서비스"
 
 
 def _infer_business_archetype(bmc_data: Dict[str, Any]) -> str:
@@ -401,15 +405,9 @@ def _infer_business_archetype(bmc_data: Dict[str, Any]) -> str:
     return "generic"
 
 
-def _core_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
+def _core_items(company_name: str, bmc_data: Dict[str, Any], archetype: str) -> List[str]:
     bmc = bmc_data.get("business_model_canvas", {}) or {}
-    candidates: List[str] = []
-    for value in [bmc_data.get("middle_layer", "")]:
-        phrase = _core_phrase(value, archetype)
-        if phrase and phrase not in candidates:
-            candidates.append(phrase)
-        if len(candidates) >= 1:
-            break
+    candidates: List[str] = [_core_service_name(company_name, bmc_data, archetype)]
     for value in bmc.get("key_activities", []):
         phrase = _core_phrase(value, archetype)
         if phrase and phrase not in candidates:
@@ -419,13 +417,15 @@ def _core_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
     items: List[str] = []
     for value in candidates:
         cleaned = _short_phrase(value, max_len=12)
-        if archetype == "content_ip_platform" and cleaned == "커머스 플랫폼":
+        if archetype == "content_ip_platform" and cleaned in {"커머스 플랫폼", "공동 창작 플랫폼"}:
             continue
         if cleaned and cleaned not in items:
             items.append(cleaned)
         if len(items) >= 2:
             break
-    return items or ["핵심 서비스"]
+    if not items:
+        items.append(_core_service_name(company_name, bmc_data, archetype))
+    return items[:2]
 
 
 def _target_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
@@ -703,7 +703,7 @@ def _repair_node_specs_with_model(
 - 각 노드는 bullet 1~2개만 유지
 - bullet은 짧은 명사구로 작성
 - Problem은 시장 pain, Value Proposition은 차별 효익, Moat은 경쟁우위, Company는 수익/비용 주체를 드러낼 것
-- 중앙 core title은 실제 핵심 사업 키워드여야 하며 영어 placeholder 금지
+- 중앙 core title은 반드시 "Core"여야 하며, 실제 서비스명/플랫폼명은 bullet로 넣어야 한다
 
 [회사명]
 {company_name}
@@ -727,7 +727,7 @@ def _repair_node_specs_with_model(
 
 [출력 규칙]
 - JSON ONLY
-- title은 지정된 영어 타이틀 유지. 단 core는 실제 핵심 사업 키워드, company는 실제 기업명 사용
+- title은 지정된 영어 타이틀 유지. core는 반드시 "Core", company는 실제 기업명 사용
 - bullets는 1~2개
 - 모든 bullet은 12자 이내를 우선
 
