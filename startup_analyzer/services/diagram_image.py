@@ -702,6 +702,7 @@ def _repair_node_specs_with_model(
 - generic placeholder 문구를 제거
 - 각 노드는 bullet 1~2개만 유지
 - bullet은 짧은 명사구로 작성
+- source priority는 strategic_summary/problem_definition/solution_value_prop 같은 설명문 맥락을 먼저 따르고, BMC는 보조 기준으로 사용할 것
 - Problem은 시장 pain, Value Proposition은 차별 효익, Moat은 경쟁우위, Company는 수익/비용 주체를 드러낼 것
 - 중앙 core title은 반드시 "Core"여야 하며, 실제 서비스명/플랫폼명은 bullet로 넣어야 한다
 
@@ -730,6 +731,9 @@ def _repair_node_specs_with_model(
 - title은 지정된 영어 타이틀 유지. core는 반드시 "Core", company는 실제 기업명 사용
 - bullets는 1~2개
 - 모든 bullet은 12자 이내를 우선
+- Problem은 generic 문구가 아니라 설명문에서 드러난 핵심 문제를 임팩트 있게 요약할 것
+- Partner와 Channel은 generic 분류어가 아니라 실제 역할 또는 실제 채널/파트너 예시가 드러나야 한다
+- 예: "대기업", "중견기업", "AI 기술 협력사"처럼 뭉뚱그린 표현은 금지하고, 더 구체적인 역할명 또는 실제 명칭으로 교정할 것
 
 [출력 스키마]
 {schema_hint}
