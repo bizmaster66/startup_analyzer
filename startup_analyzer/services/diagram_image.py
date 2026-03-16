@@ -153,7 +153,7 @@ def _build_diagram_prompt(
 - "core business keyword", "platform business", "기업 본체" 같은 메타 표현이나 placeholder 표현을 절대 출력하지 말 것
 - Problem은 시장 문제, Target은 고객, Channel은 접점/영업, Partner는 관계, Operating은 운영 활동, Value Proposition은 차별 효익, Moat은 경쟁 우위를 드러내는 내용만 써야 함
 - 중앙 중앙(2-2)은 title이 아니라 bullet에서 실제 서비스명/플랫폼명/제품명을 보여줄 것
-- 예: 우주문방구의 경우 중앙 Core에는 "스토리네이션"이 들어가야 하며, Channel은 스토리네이션으로 고객이 유입되는 채널을 설명해야 함
+- 중앙 Core와 Channel은 반드시 현재 기업의 실제 서비스명과 실제 유입 채널을 기준으로 작성할 것
 - 하단 중앙(3-2)은 돈 흐름이 들어오고 비용이 나가는 재무 주체로 이해되도록 표현할 것
 - 각 노드의 텍스트는 투자자 보고서, 전략 컨설팅 산출물, 사업개발 제안서에 들어갈 만한 톤으로 정제할 것
 - 캐주얼한 표현, 홍보성 표현, 문장형 장문 bullet 금지
@@ -370,9 +370,7 @@ def _normalize_bullet_for_role(
 def _core_service_name(company_name: str, bmc_data: Dict[str, Any], archetype: str) -> str:
     middle = clean_korean_label(bmc_data.get("middle_layer", ""))
     if middle:
-        if archetype == "content_ip_platform" and "플랫폼" in middle and any(token in middle for token in ["스토리", "세계관"]):
-            return "스토리네이션"
-        return _short_phrase(middle, max_len=14) or middle
+        return _service_name_phrase(middle) or _short_phrase(middle, max_len=14) or middle
     if archetype == "content_ip_platform":
         return "핵심 플랫폼"
     if archetype == "robotics_b2b":
@@ -380,6 +378,21 @@ def _core_service_name(company_name: str, bmc_data: Dict[str, Any], archetype: s
     if archetype == "brand_consumer":
         return f"{company_name} 브랜드"
     return f"{company_name} 서비스"
+
+
+# --- NEW FUNCTION ---
+def _service_name_phrase(text: str) -> str:
+    cleaned = clean_korean_label(text)
+    if not cleaned:
+        return ""
+    generic_prefixes = {"핵심", "공동", "커머스", "콘텐츠", "플랫폼", "서비스", "솔루션", "모바일", "웹"}
+    parts = [part.strip() for part in cleaned.replace("(", " ").replace(")", " ").split() if part.strip()]
+    for part in parts:
+        if part in generic_prefixes:
+            continue
+        if len(part) >= 2:
+            return part
+    return ""
 
 
 def _infer_business_archetype(bmc_data: Dict[str, Any]) -> str:
@@ -471,10 +484,10 @@ def _channel_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if archetype == "robotics_b2b" and "직영" in text and "카페" in text:
             phrase = "직영 로봇 카페"
-        elif archetype == "content_ip_platform" and any(token in text for token in ["스토리네이션", "웹", "플랫폼"]):
-            phrase = "스토리네이션"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["웹", "플랫폼", "서비스"]):
+            phrase = _service_name_phrase(text) or _short_phrase(text, max_len=12)
         elif archetype == "content_ip_platform" and any(token in text for token in ["캐릭터네이션", "먀노벨", "앱"]):
-            phrase = "창작 지원 앱"
+            phrase = _service_name_phrase(text) or "보조 앱"
         elif archetype == "content_ip_platform" and any(token in text for token in ["SNS", "커뮤니티"]):
             phrase = "창작 커뮤니티"
         elif archetype == "brand_consumer" and ("올리브영" in text or "H&B" in text):
@@ -982,10 +995,10 @@ def _channel_phrase(value: Any, archetype: str) -> str:
         if "전시" in text:
             return "전시회 리드"
     if archetype == "content_ip_platform":
-        if any(token in text for token in ["스토리네이션", "웹", "모바일", "플랫폼"]):
-            return "스토리네이션"
+        if any(token in text for token in ["웹", "모바일", "플랫폼", "서비스"]):
+            return _service_name_phrase(text) or _short_phrase(text, max_len=12)
         if any(token in text for token in ["캐릭터네이션", "먀노벨", "앱"]):
-            return "창작 지원 앱"
+            return _service_name_phrase(text) or "보조 앱"
         if any(token in text for token in ["SNS", "커뮤니티"]):
             return "창작 커뮤니티"
     return _short_phrase(text, max_len=12)
