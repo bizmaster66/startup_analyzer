@@ -63,6 +63,8 @@ def _build_diagram_prompt(
 - 배경: 흰색 또는 아주 연한 회색
 - 카드: 필요할 경우에만 아주 연한 회색 또는 흰색 배경의 미세한 rounded rectangle을 사용하고, 두꺼운 카드 박스나 강한 그림자는 금지
 - 카드: 카드보다 노드 라벨과 흐름이 먼저 보이도록, 프레임은 매우 얇고 절제된 outline 스타일로 처리
+- 카드: 각 노드는 현재보다 더 작고 가볍게 표현하고, 카드 사이 간격은 충분히 넓혀 화살표가 먼저 읽히게 할 것
+- 카드: 3x3 각 칸 사이의 여백을 크게 확보하여 중앙 주변에 넓은 flow corridor를 만들 것
 - 테마: 흰 배경, 짙은 회색 또는 검은 텍스트, 정보/돈/서비스 흐름만 색을 사용하는 컨설팅 다이어그램 톤
 - 아이콘: 이모지나 캐주얼한 이모티콘 사용 금지
 - 아이콘: 각 노드에는 발표자료/컨설팅 슬라이드에 적합한 전문적인 monochrome line icon 또는 simple flat business icon만 작게 배치
@@ -70,6 +72,7 @@ def _build_diagram_prompt(
 - 아이콘: 귀엽거나 장식적인 그림체, 스티커 느낌, 3D 느낌, colorful emoji style 금지
 - 폰트/텍스트: 전문 보고서용 슬라이드처럼 가독성이 높은 sans-serif 스타일로 표현
 - 폰트/텍스트: 전체 텍스트는 지금 결과물의 체감상 절반 수준까지 축소할 것
+- 폰트/텍스트: 현재보다 최소 35~45% 더 작게, 여백이 먼저 보이도록 축소할 것
 - 폰트/텍스트: title과 bullet의 최대 글자 크기를 엄격히 제한해 카드 내부를 지배하지 않게 할 것
 - 폰트/텍스트: title은 node label 수준의 작은 전문 제목으로 처리하고, headline처럼 크게 키우지 말 것
 - 폰트/텍스트: subtitle은 모든 노드에서 금지한다. title 아래에 subtitle 줄을 추가하지 말 것
@@ -83,6 +86,7 @@ def _build_diagram_prompt(
 - 폰트/텍스트: 샘플 전략 다이어그램처럼 title은 semibold 또는 bold, bullet은 regular 또는 medium으로 처리할 것
 - 폰트/텍스트: 텍스트 색은 검정 또는 매우 짙은 회색으로 유지하고, 본문에 불필요한 색상 강조를 넣지 말 것
 - 각 노드는 title 1줄, bullet 1~2개만 포함
+- 각 노드 bullet은 가능하면 8~10자 수준의 짧은 키워드로 유지하고, 길어도 12자를 넘기지 말 것
 - 정보 흐름은 파란색 + 사각형 마커
 - 돈 흐름은 초록색 + 달러 마커
 - 서비스 흐름은 주황색 + 원형 마커
@@ -144,6 +148,7 @@ def _build_diagram_prompt(
 - 이 이미지는 BMC 카드 요약이 아니라 비즈니스가 어떻게 작동하는지 보여주는 도해도여야 함
 - 노드 내부 텍스트보다 화살표와 화살표 라벨이 더 먼저 읽히도록 구성할 것
 - 화살표는 충분히 길고 선명하게 보여야 하며, 카드 사이 여백을 넓게 확보해 화살표가 숨지 않게 할 것
+- 카드보다 화살표와 라벨이 시각적으로 우선하도록 구성하고, 중앙 노드 주변 화살표가 답답하게 겹치지 않게 할 것
 - 각 주요 관계마다 화살표 라벨을 붙여, 무엇이 이동하는지 즉시 이해되게 할 것
 - 화살표 라벨은 "사용 데이터", "도입 요청", "분석 결과", "구독료", "제휴 수수료", "채널 지원", "운영 데이터", "인프라 비용"처럼 이동 대상이 드러나는 명확한 워딩을 사용할 것
 - 흐름 라벨은 추상어보다 교환되는 정보, 돈, 서비스/자산을 직접 설명하는 표현을 우선할 것
@@ -169,6 +174,8 @@ def _build_diagram_prompt(
 - node spec의 실제 내용을 무시하고 generic bullet로 대체하면 실패다
 - 노드 설명이 너무 많아서 BMC 이미지처럼 보이면 실패다
 - 화살표가 적거나 짧아서 작동 구조가 안 보이면 실패다
+- 카드가 너무 커서 3x3 사이 간격이 좁아지면 실패다
+- 텍스트가 커서 여백이 사라지면 실패다
 - 최종 이미지는 '무엇을 팔고, 누구와 연결되며, 돈과 정보와 서비스가 어떻게 움직이는지'를 이해할 수 있어야 한다
 - 범례 누락 금지
 - 화살표 방향은 반드시 위의 [검증된 화살표 방향]을 그대로 따를 것
@@ -246,6 +253,14 @@ def _normalize_node_specs(
                 break
             if fallback_bullet and fallback_bullet != title and fallback_bullet not in bullets:
                 bullets.append(fallback_bullet)
+        if key == "core" and len(bullets) == 0:
+            archetype = _infer_business_archetype(bmc_data)
+            if archetype == "content_ip_platform":
+                bullets = ["AI 창작 도구"]
+            elif archetype == "robotics_b2b":
+                bullets = ["로봇 시스템 개발"]
+            elif archetype == "brand_consumer":
+                bullets = ["제품 기획"]
         normalized[key] = {"title": title, "bullets": bullets}
     return normalized
 
@@ -360,6 +375,8 @@ def _infer_business_archetype(bmc_data: Dict[str, Any]) -> str:
         return "brand_consumer"
     if any(token in combined for token in ["로봇", "자율주행", "RBS", "바리스타", "배달", "휴머노이드"]):
         return "robotics_b2b"
+    if any(token in combined for token in ["웹소설", "스토리", "세계관", "IP", "출판", "미디어", "캐릭터", "콘텐츠", "창작"]):
+        return "content_ip_platform"
     if any(token in combined for token in ["커머스", "앱테크", "마켓", "쇼핑", "플랫폼", "소비자"]):
         return "commerce_platform"
     return "generic"
@@ -383,6 +400,8 @@ def _core_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
     items: List[str] = []
     for value in candidates:
         cleaned = _short_phrase(value, max_len=12)
+        if archetype == "content_ip_platform" and cleaned == "커머스 플랫폼":
+            continue
         if cleaned and cleaned not in items:
             items.append(cleaned)
         if len(items) >= 2:
@@ -404,6 +423,12 @@ def _target_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
             phrase = "뷰티 소비자"
         elif archetype == "brand_consumer" and "프리미엄" in text and "소비자" in text:
             phrase = "프리미엄 색조 소비자"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["웹소설", "스토리", "작가", "창작"]):
+            phrase = "스토리 창작자"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["독자", "소비자", "사용자", "참여형", "UGC"]):
+            phrase = "참여형 독자층"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["출판사", "미디어", "기업"]):
+            phrase = "IP 사업자"
         elif archetype == "robotics_b2b" and any(token in text for token in ["운영사", "리테일", "시설", "관리자"]):
             phrase = _short_phrase(text, max_len=14)
         else:
@@ -425,6 +450,12 @@ def _channel_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if archetype == "robotics_b2b" and "직영" in text and "카페" in text:
             phrase = "직영 로봇 카페"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["스토리네이션", "웹", "플랫폼"]):
+            phrase = "스토리네이션"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["캐릭터네이션", "먀노벨", "앱"]):
+            phrase = "창작 지원 앱"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["SNS", "커뮤니티"]):
+            phrase = "창작 커뮤니티"
         elif archetype == "brand_consumer" and ("올리브영" in text or "H&B" in text):
             phrase = "올리브영 H&B"
         elif archetype == "brand_consumer" and "온라인" in text and "스토어" in text:
@@ -449,7 +480,18 @@ def _channel_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
 def _partner_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
     bmc = bmc_data.get("business_model_canvas", {}) or {}
     items: List[str] = []
-    for value in bmc.get("key_partnerships", []):
+    values = list(bmc.get("key_partnerships", []))
+    if archetype == "content_ip_platform":
+        def _priority(text: str) -> int:
+            if any(token in text for token in ["출판사", "웹소설", "미디어", "제작사", "라이선싱", "유통"]):
+                return 0
+            if any(token in text for token in ["AI", "데이터", "R&D"]):
+                return 1
+            if any(token in text for token in ["클라우드", "인프라"]):
+                return 2
+            return 3
+        values = sorted(values, key=lambda value: _priority(clean_korean_label(value)))
+    for value in values:
         text = clean_korean_label(value)
         if not text:
             continue
@@ -460,6 +502,12 @@ def _partner_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if any(token in text for token in ["OEM", "ODM"]):
             phrase = "OEM·ODM 제조사"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["출판사", "웹소설", "미디어", "제작사", "라이선싱", "유통"]):
+            phrase = "IP 유통 파트너"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["AI", "데이터", "R&D"]):
+            phrase = "AI 기술 협력사"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["클라우드", "인프라"]):
+            phrase = "클라우드 인프라사"
         elif archetype == "brand_consumer" and any(token in text for token in ["제조", "생산", "협력사"]):
             phrase = "화장품 제조 파트너"
         elif any(token in text for token in ["부품", "하드웨어", "제조"]):
@@ -487,6 +535,12 @@ def _operating_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if archetype == "robotics_b2b" and ("R&D" in text or "연구" in text):
             phrase = "로봇 지능 R&D"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["플랫폼 개발", "운영"]):
+            phrase = "플랫폼 개발·운영"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["AI 모델", "자연어", "생성형"]):
+            phrase = "AI 모델 고도화"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["커뮤니티", "사용자 유치"]):
+            phrase = "커뮤니티 활성화"
         elif archetype == "brand_consumer" and ("OEM" in text or "ODM" in text):
             phrase = "OEM 생산 관리"
         elif "개발" in text and "제조" in text:
@@ -528,6 +582,10 @@ def _moat_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         phrase = ""
         if archetype == "robotics_b2b" and "AI" in text and any(token in text for token in ["지능", "기술", "모델"]):
             phrase = "AI 로봇 지능"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["플랫폼", "AI", "자연어", "생성형"]):
+            phrase = "AI 기반 플랫폼"
+        elif archetype == "content_ip_platform" and any(token in text for token in ["유저 창작", "UGC", "세계관", "콘텐츠 데이터", "빅데이터"]):
+            phrase = "창작 데이터 자산"
         elif archetype == "brand_consumer" and "브랜드" in text and ("IP" in text or "지식재산" in text):
             phrase = "브랜드 IP"
         elif archetype == "brand_consumer" and (("기획" in text and "디자인" in text) or "미적 경험 디자인" in text):
@@ -536,6 +594,8 @@ def _moat_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
             phrase = "브랜드 마케팅 역량"
         elif "R&D" in text or "엔지니어" in text or "인력" in text:
             phrase = "전문 R&D 인력"
+        elif archetype == "content_ip_platform" and "데이터" in text and any(token in text for token in ["세계관", "콘텐츠", "유저", "UGC", "창작"]):
+            phrase = "창작 데이터 자산"
         elif "데이터" in text:
             phrase = "운영 데이터 자산"
         elif "지적 재산" in text or "IP" in text:
@@ -731,6 +791,8 @@ def _problem_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
         defaults = ["메이크업 루틴 복잡성", "개성 표현 한계"]
     elif archetype == "robotics_b2b":
         defaults = ["운영 비효율", "실생활 적용 미흡"]
+    elif archetype == "content_ip_platform":
+        defaults = ["IP 개발 비용", "전문가 의존 한계"]
     for default in defaults:
         if len(items) >= 2:
             break
@@ -811,6 +873,12 @@ def _problem_phrase(value: Any, archetype: str) -> str:
         return "운영 비효율"
     if archetype == "brand_consumer" and "감성" in text and any(token in text for token in ["미흡", "부족", "결여"]):
         return "감성 경험 부족"
+    if archetype == "content_ip_platform" and any(token in text for token in ["개발 비용", "고비용", "리스크"]):
+        return "IP 개발 비용"
+    if archetype == "content_ip_platform" and any(token in text for token in ["전문가", "소수", "제한적"]):
+        return "전문가 의존 한계"
+    if archetype == "content_ip_platform" and any(token in text for token in ["확장성", "확장"]):
+        return "확장성 한계"
     if archetype == "brand_consumer" and any(token in text for token in ["메이크업 루틴", "메이크업 과정"]):
         return "메이크업 루틴 복잡성"
     if archetype == "brand_consumer" and any(token in text for token in ["개성", "자기표현"]) and any(token in text for token in ["한계", "어려움", "부족"]):
@@ -853,6 +921,13 @@ def _target_phrase(value: Any, archetype: str) -> str:
             return "리테일·서비스사"
         if any(token in text for token in ["시설", "빌딩", "관리자"]):
             return "시설 운영사"
+    if archetype == "content_ip_platform":
+        if any(token in text for token in ["웹소설", "스토리", "작가", "창작"]):
+            return "스토리 창작자"
+        if any(token in text for token in ["독자", "소비자", "사용자", "참여형", "UGC"]):
+            return "참여형 독자층"
+        if any(token in text for token in ["출판사", "미디어", "기업"]):
+            return "IP 사업자"
     if "소비자" in text:
         return _short_phrase(text, max_len=12) or "핵심 소비자"
     if any(token in text for token in ["기업", "운영사", "관리자", "고객사"]):
@@ -881,6 +956,13 @@ def _channel_phrase(value: Any, archetype: str) -> str:
             return "기업 직접 영업"
         if "전시" in text:
             return "전시회 리드"
+    if archetype == "content_ip_platform":
+        if any(token in text for token in ["스토리네이션", "웹", "모바일", "플랫폼"]):
+            return "스토리네이션"
+        if any(token in text for token in ["캐릭터네이션", "먀노벨", "앱"]):
+            return "창작 지원 앱"
+        if any(token in text for token in ["SNS", "커뮤니티"]):
+            return "창작 커뮤니티"
     return _short_phrase(text, max_len=12)
 
 
@@ -907,6 +989,13 @@ def _partner_phrase(value: Any, archetype: str) -> str:
             return "로봇 제조 파트너"
         if any(token in text for token in ["고객사", "운영사", "매장", "리테일"]):
             return "도입 고객사"
+    if archetype == "content_ip_platform":
+        if any(token in text for token in ["출판사", "웹소설", "미디어", "제작사", "라이선싱", "유통"]):
+            return "IP 유통 파트너"
+        if any(token in text for token in ["AI", "데이터", "R&D"]):
+            return "AI 기술 협력사"
+        if any(token in text for token in ["클라우드", "인프라"]):
+            return "클라우드 인프라사"
     if any(token in text for token in ["물류", "배송"]):
         return "물류 운영 파트너"
     return _short_phrase(text, max_len=12)
@@ -931,6 +1020,13 @@ def _operating_phrase(value: Any, archetype: str) -> str:
             return "시스템 개발·제조"
         if any(token in text for token in ["설치", "유지보수"]):
             return "설치·유지보수"
+    if archetype == "content_ip_platform":
+        if any(token in text for token in ["플랫폼 개발", "운영"]):
+            return "플랫폼 개발·운영"
+        if any(token in text for token in ["AI 모델", "자연어", "생성형"]):
+            return "AI 모델 고도화"
+        if any(token in text for token in ["커뮤니티", "사용자 유치"]):
+            return "커뮤니티 활성화"
     if "영업" in text:
         return "B2B 영업"
     return _short_phrase(text, max_len=12)
@@ -951,6 +1047,11 @@ def _moat_phrase(value: Any, archetype: str) -> str:
             return "AI 로봇 지능"
         if any(token in text for token in ["R&D", "엔지니어", "인력"]):
             return "전문 R&D 인력"
+    if archetype == "content_ip_platform":
+        if any(token in text for token in ["플랫폼", "AI", "자연어", "생성형"]):
+            return "AI 기반 플랫폼"
+        if any(token in text for token in ["유저 창작", "UGC", "세계관", "콘텐츠 데이터", "빅데이터", "창작"]):
+            return "창작 데이터 자산"
     if "데이터" in text:
         return "운영 데이터 자산"
     if "IP" in text or "지적 재산" in text:
@@ -966,6 +1067,12 @@ def _value_phrase(value: Any, archetype: str) -> str:
         return "인력난 해소"
     if archetype == "robotics_b2b" and "품질" in text and any(token in text for token in ["일관", "균일"]):
         return "품질 일관성"
+    if archetype == "content_ip_platform" and any(token in text for token in ["진입 장벽", "낮은 비용", "낮은 리스크"]):
+        return "낮은 진입 장벽"
+    if archetype == "content_ip_platform" and any(token in text for token in ["AI", "창작 지원", "공동 창작"]):
+        return "AI 창작 지원"
+    if archetype == "content_ip_platform" and any(token in text for token in ["IP", "수익화", "사업화"]):
+        return "IP 수익화 기회"
     if archetype == "brand_consumer" and ("포스트 걸코어" in text or "브랜드 미학" in text):
         return "브랜드 미학"
     if archetype == "brand_consumer" and "이사배" in text and any(token in text for token in ["전문성", "노하우"]):
@@ -1007,6 +1114,12 @@ def _core_phrase(value: Any, archetype: str) -> str:
         return "AI 로봇 솔루션"
     if archetype == "robotics_b2b" and "서비스 로봇" in text:
         return "서비스 로봇"
+    if archetype == "content_ip_platform" and any(token in text for token in ["세계관", "공동 창작"]):
+        return "공동 창작 플랫폼"
+    if archetype == "content_ip_platform" and any(token in text for token in ["AI", "창작 도구"]):
+        return "AI 창작 도구"
+    if archetype == "content_ip_platform" and any(token in text for token in ["IP", "사업화", "라이선싱"]):
+        return "IP 사업화"
     if archetype == "brand_consumer" and "브랜드" in text:
         return "브랜드 플랫폼"
     if archetype == "brand_consumer" and ("뷰티 솔루션" in text or "뷰티 브랜드" in text):
