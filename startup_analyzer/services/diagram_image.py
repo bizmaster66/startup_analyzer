@@ -198,7 +198,10 @@ def _prepare_node_specs(client: genai.Client, company_name: str, bmc_data: Dict[
         repaired = _repair_node_specs_with_model(client, company_name, bmc_data, specs)
         if repaired:
             specs = repaired
-    return specs
+    # --- MODIFIED ---
+    # Final pass: enforce role-aware short labels so the image model never
+    # receives sentence fragments or generic placeholders.
+    return _normalize_node_specs(company_name, bmc_data, specs)
 
 
 def _build_default_node_specs(company_name: str, bmc_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -209,15 +212,134 @@ def _build_default_node_specs(company_name: str, bmc_data: Dict[str, Any]) -> Di
         "target": {"title": "Target", "bullets": _target_items(bmc_data, archetype)},
         "channel": {"title": "Channel", "bullets": _channel_items(bmc_data, archetype)},
         "partner": {"title": "Partner", "bullets": _partner_items(bmc_data, archetype)},
-        "core": {
-            "title": clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼"),
-            "bullets": _core_items(bmc_data, archetype),
-        },
+        "core": {"title": _core_title(company_name, bmc_data, archetype), "bullets": _core_items(bmc_data, archetype)},
         "operating": {"title": "Operating", "bullets": _operating_items(bmc_data, archetype)},
         "value": {"title": "Value Proposition", "bullets": _value_items(bmc_data, archetype)},
         "company": {"title": company_name, "bullets": _company_items(bmc_data, company_name)},
         "moat": {"title": "Moat", "bullets": _moat_items(bmc_data, archetype)},
     }
+
+
+# --- NEW FUNCTION ---
+def _normalize_node_specs(
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    specs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    archetype = _infer_business_archetype(bmc_data)
+    defaults = _build_default_node_specs(company_name, bmc_data)
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for key, default in defaults.items():
+        current = specs.get(key, {}) or {}
+        title = _normalize_node_title(key, current.get("title", ""), default["title"], company_name, bmc_data, archetype)
+        bullets = _normalize_node_bullets(
+            key,
+            current.get("bullets", []),
+            default["bullets"],
+            company_name,
+            bmc_data,
+            archetype,
+        )
+        bullets = [bullet for bullet in bullets if bullet and bullet != title][:2]
+        for fallback_bullet in default["bullets"]:
+            if len(bullets) >= 2:
+                break
+            if fallback_bullet and fallback_bullet != title and fallback_bullet not in bullets:
+                bullets.append(fallback_bullet)
+        normalized[key] = {"title": title, "bullets": bullets}
+    return normalized
+
+
+# --- NEW FUNCTION ---
+def _normalize_node_title(
+    key: str,
+    current_title: Any,
+    fallback_title: str,
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    archetype: str,
+) -> str:
+    if key == "core":
+        return _core_title(company_name, bmc_data, archetype)
+    if key == "company":
+        return company_name
+    title = clean_korean_label(current_title, fallback=fallback_title)
+    if title in {"기업 본체", "core business keyword", "platform business"}:
+        return fallback_title
+    return title
+
+
+# --- NEW FUNCTION ---
+def _normalize_node_bullets(
+    key: str,
+    current_bullets: Any,
+    fallback_bullets: List[str],
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    archetype: str,
+) -> List[str]:
+    source_items = current_bullets if isinstance(current_bullets, list) else []
+    normalized: List[str] = []
+    for value in source_items:
+        phrase = _normalize_bullet_for_role(key, value, company_name, bmc_data, archetype)
+        if phrase and phrase not in normalized:
+            normalized.append(phrase)
+        if len(normalized) >= 2:
+            break
+    if len(normalized) == 0:
+        for value in fallback_bullets:
+            phrase = _normalize_bullet_for_role(key, value, company_name, bmc_data, archetype)
+            if phrase and phrase not in normalized:
+                normalized.append(phrase)
+            if len(normalized) >= 2:
+                break
+    return normalized[:2]
+
+
+# --- NEW FUNCTION ---
+def _normalize_bullet_for_role(
+    key: str,
+    value: Any,
+    company_name: str,
+    bmc_data: Dict[str, Any],
+    archetype: str,
+) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if key == "problem":
+        return _problem_phrase(text, archetype)
+    if key == "target":
+        return _target_phrase(text, archetype)
+    if key == "channel":
+        return _channel_phrase(text, archetype)
+    if key == "partner":
+        return _partner_phrase(text, archetype)
+    if key == "core":
+        return _core_phrase(text, archetype)
+    if key == "operating":
+        return _operating_phrase(text, archetype)
+    if key == "value":
+        return _value_phrase(text, archetype)
+    if key == "company":
+        return _financial_phrase(text, revenue="수익" in text or "매출" in text or "수취" in text)
+    if key == "moat":
+        return _moat_phrase(text, archetype)
+    return _short_phrase(text, max_len=10)
+
+
+# --- NEW FUNCTION ---
+def _core_title(company_name: str, bmc_data: Dict[str, Any], archetype: str) -> str:
+    candidates = [
+        bmc_data.get("middle_layer", ""),
+        *(((bmc_data.get("business_model_canvas", {}) or {}).get("value_propositions", []))[:2]),
+        *(((bmc_data.get("business_model_canvas", {}) or {}).get("key_activities", []))[:2]),
+    ]
+    for candidate in candidates:
+        phrase = _core_phrase(candidate, archetype)
+        if phrase and phrase not in {"핵심 서비스", "커머스 플랫폼"}:
+            return phrase
+    return clean_korean_label(bmc_data.get("middle_layer", ""), fallback=f"{company_name} 플랫폼")
 
 
 def _infer_business_archetype(bmc_data: Dict[str, Any]) -> str:
@@ -444,16 +566,32 @@ def _needs_node_spec_repair(specs: Dict[str, Dict[str, Any]]) -> bool:
             return True
         if len(bullets) > 2:
             return True
+        if any(len(bullet) > 14 for bullet in bullets):
+            return True
         if any(term in title for term in banned_terms):
             return True
         if any(term in bullet for term in banned_terms for bullet in bullets):
             return True
         if any(bullet in generic_bullets for bullet in bullets):
             return True
-        if any(bullet in {"합리적", "탐색", "기존", "소비자", "고객", "서비스"} for bullet in bullets):
+        if any(bullet in {"합리적", "탐색", "기존", "소비자", "고객", "서비스", "브랜드", "포스트"} for bullet in bullets):
             return True
         if key == "problem" and any(bullet in {"기존", "소비자", "고객"} for bullet in bullets):
             return True
+        if any(_looks_fragmentary(bullet) for bullet in bullets):
+            return True
+    return False
+
+
+# --- NEW FUNCTION ---
+def _looks_fragmentary(text: str) -> bool:
+    cleaned = clean_korean_label(text)
+    if not cleaned:
+        return True
+    if cleaned.endswith(("은", "는", "이", "가", "을", "를", "의", "및", "등", "보")):
+        return True
+    if any(token in cleaned for token in ["기존 ", "대부분", "현대 ", "개인의"]):
+        return True
     return False
 
 
@@ -588,7 +726,17 @@ def _problem_items(bmc_data: Dict[str, Any], archetype: str) -> List[str]:
             items.append(cleaned)
         if len(items) >= 2:
             break
-    return items or ["시장 비효율", "기존 대안 한계"]
+    defaults = ["시장 비효율", "기존 대안 한계"]
+    if archetype == "brand_consumer":
+        defaults = ["메이크업 루틴 복잡성", "개성 표현 한계"]
+    elif archetype == "robotics_b2b":
+        defaults = ["운영 비효율", "실생활 적용 미흡"]
+    for default in defaults:
+        if len(items) >= 2:
+            break
+        if default not in items:
+            items.append(default)
+    return items[:2]
 
 
 def _company_items(bmc_data: Dict[str, Any], company_name: str) -> List[str]:
@@ -616,12 +764,22 @@ def _short_phrase(value: Any, max_len: int = 12) -> str:
     ).strip(" ,.-")
     if len(text) <= max_len:
         return text
+    if " " in text:
+        words = [word for word in text.split() if word]
+        compact = ""
+        for word in words:
+            candidate = f"{compact} {word}".strip()
+            if len(candidate) > max_len:
+                break
+            compact = candidate
+        if compact and len(compact) >= 4:
+            return compact
     for sep in [",", "·", "(", ")", "/", "및"]:
         if sep in text:
             candidate = clean_korean_label(text.split(sep)[0])
             if candidate and len(candidate) <= max_len:
                 return candidate
-    return text[:max_len].rstrip()
+    return ""
 
 
 def _problem_phrase(value: Any, archetype: str) -> str:
@@ -645,6 +803,10 @@ def _problem_phrase(value: Any, archetype: str) -> str:
             return keyword
     if any(token in text for token in ["인력", "노동력"]) and any(token in text for token in ["부담", "확보", "관리"]):
         return "인력 운영 부담"
+    if any(token in text for token in ["혁신 부족", "비효율적", "비효율"]) and any(token in text for token in ["운영", "구조", "시장", "서비스"]):
+        return "운영 비효율"
+    if archetype == "robotics_b2b" and any(token in text for token in ["공장 환경", "일상생활 공간", "일상 공간"]):
+        return "실생활 적용 미흡"
     if "비효율" in text and any(token in text for token in ["운영", "서비스"]):
         return "운영 비효율"
     if archetype == "brand_consumer" and "감성" in text and any(token in text for token in ["미흡", "부족", "결여"]):
@@ -653,6 +815,8 @@ def _problem_phrase(value: Any, archetype: str) -> str:
         return "메이크업 루틴 복잡성"
     if archetype == "brand_consumer" and any(token in text for token in ["개성", "자기표현"]) and any(token in text for token in ["한계", "어려움", "부족"]):
         return "개성 표현 한계"
+    if archetype == "brand_consumer" and any(token in text for token in ["대량 생산", "일반적인 제품", "획일적", "제한적인 제품 선택"]):
+        return "획일적 제품 경험"
     if archetype == "brand_consumer" and "직접 바르는" in text and any(token in text for token in ["한계", "부족", "미흡"]):
         return "직접 사용 경험 부재"
     if archetype == "brand_consumer" and any(token in text for token in ["젤 네일", "네일팁", "간편함"]):
@@ -667,7 +831,131 @@ def _problem_phrase(value: Any, archetype: str) -> str:
         candidate = _short_phrase(chunk, max_len=14)
         if candidate and candidate not in {"기존", "소비자", "고객", "커머스"} and not _looks_like_solution_phrase(candidate):
             return candidate
-    return _short_phrase(text, max_len=14)
+    return ""
+
+
+# --- NEW FUNCTION ---
+def _target_phrase(value: Any, archetype: str) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if archetype == "brand_consumer":
+        if "뷰티" in text and "소비자" in text:
+            return "뷰티 소비자"
+        if "이사배" in text and any(token in text for token in ["팬", "구독", "크리에이터"]):
+            return "이사배 팬층"
+        if "메이크업" in text and any(token in text for token in ["향상", "스킬", "희망"]):
+            return "메이크업 관심층"
+    if archetype == "robotics_b2b":
+        if "무인 매장" in text:
+            return "무인 매장 운영사"
+        if any(token in text for token in ["리테일", "서비스 기업"]):
+            return "리테일·서비스사"
+        if any(token in text for token in ["시설", "빌딩", "관리자"]):
+            return "시설 운영사"
+    if "소비자" in text:
+        return _short_phrase(text, max_len=12) or "핵심 소비자"
+    if any(token in text for token in ["기업", "운영사", "관리자", "고객사"]):
+        return _short_phrase(text, max_len=12) or "핵심 고객사"
+    return ""
+
+
+# --- NEW FUNCTION ---
+def _channel_phrase(value: Any, archetype: str) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if archetype == "brand_consumer":
+        if "자사몰" in text or "D2C" in text:
+            return "공식 자사몰"
+        if "올리브영" in text or "H&B" in text:
+            return "올리브영 H&B"
+        if "네이버" in text and "라이브" in text:
+            return "네이버 라이브"
+        if any(token in text for token in ["유튜브", "SNS", "인플루언서"]):
+            return "SNS 채널"
+    if archetype == "robotics_b2b":
+        if "직영" in text and "카페" in text:
+            return "직영 로봇 카페"
+        if "기업 고객" in text or "직접 영업" in text:
+            return "기업 직접 영업"
+        if "전시" in text:
+            return "전시회 리드"
+    return _short_phrase(text, max_len=12)
+
+
+# --- NEW FUNCTION ---
+def _partner_phrase(value: Any, archetype: str) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if text in GENERIC_PARTNER_TERMS or any(keyword in text for keyword in PARTNER_EXCLUDE_KEYWORDS):
+        return ""
+    if archetype == "brand_consumer":
+        if "올리브영" in text or "H&B" in text:
+            return ""
+        if "아모레" in text:
+            return "브랜드 협력사"
+        if any(token in text for token in ["OEM", "ODM"]):
+            return "OEM·ODM 제조사"
+        if any(token in text for token in ["제조", "생산", "협력사"]):
+            return "화장품 제조사"
+        if any(token in text for token in ["물류", "배송", "유통"]):
+            return "물류 운영 파트너"
+    if archetype == "robotics_b2b":
+        if any(token in text for token in ["부품", "하드웨어", "제조"]):
+            return "로봇 제조 파트너"
+        if any(token in text for token in ["고객사", "운영사", "매장", "리테일"]):
+            return "도입 고객사"
+    if any(token in text for token in ["물류", "배송"]):
+        return "물류 운영 파트너"
+    return _short_phrase(text, max_len=12)
+
+
+# --- NEW FUNCTION ---
+def _operating_phrase(value: Any, archetype: str) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if archetype == "brand_consumer":
+        if any(token in text for token in ["제품 기획", "제품 개발"]):
+            return "제품 기획·개발"
+        if "콘텐츠" in text or "마케팅" in text:
+            return "브랜드 마케팅"
+        if any(token in text for token in ["생산", "품질"]):
+            return "생산·품질 관리"
+    if archetype == "robotics_b2b":
+        if "R&D" in text or "연구" in text:
+            return "로봇 지능 R&D"
+        if "제조" in text or "시스템 개발" in text:
+            return "시스템 개발·제조"
+        if any(token in text for token in ["설치", "유지보수"]):
+            return "설치·유지보수"
+    if "영업" in text:
+        return "B2B 영업"
+    return _short_phrase(text, max_len=12)
+
+
+# --- NEW FUNCTION ---
+def _moat_phrase(value: Any, archetype: str) -> str:
+    text = clean_korean_label(value)
+    if not text:
+        return ""
+    if archetype == "brand_consumer":
+        if "이사배" in text and any(token in text for token in ["브랜드", "전문성", "노하우"]):
+            return "이사배 브랜드"
+        if any(token in text for token in ["기획", "디자인", "R&D", "전문성"]):
+            return "제품 기획 역량"
+    if archetype == "robotics_b2b":
+        if "AI" in text and any(token in text for token in ["지능", "기술", "모델"]):
+            return "AI 로봇 지능"
+        if any(token in text for token in ["R&D", "엔지니어", "인력"]):
+            return "전문 R&D 인력"
+    if "데이터" in text:
+        return "운영 데이터 자산"
+    if "IP" in text or "지적 재산" in text:
+        return "핵심 IP"
+    return _short_phrase(text, max_len=12)
 
 
 def _value_phrase(value: Any, archetype: str) -> str:
