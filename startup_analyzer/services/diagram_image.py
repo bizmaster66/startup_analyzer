@@ -170,6 +170,8 @@ def _build_diagram_prompt(
 - 각 주요 관계마다 화살표 라벨을 붙여, 무엇이 이동하는지 즉시 이해되게 할 것
 - 화살표 라벨은 "사용 데이터", "도입 요청", "분석 결과", "구독료", "제휴 수수료", "채널 지원", "운영 데이터", "인프라 비용"처럼 이동 대상이 드러나는 명확한 워딩을 사용할 것
 - 흐름 라벨은 추상어보다 교환되는 정보, 돈, 서비스/자산을 직접 설명하는 표현을 우선할 것
+- 범례가 이미 타입을 설명하므로, 화살표 라벨에 "돈:", "정보:", "서비스:" 같은 접두어를 절대 붙이지 말 것
+- 화살표 라벨은 오직 이동하는 항목명만 표기할 것. 예: "구독료", "사용 데이터", "분석 서비스"
 - 화살표 수는 너무 적지 않게 유지하되, 핵심 메커니즘을 보여주는 주요 흐름이 충분히 보이게 할 것
 - 중앙의 핵심 사업 노드와 하단 중앙의 {company_name} 사이의 역할 차이가 화살표로 분명히 드러나야 함
 
@@ -1575,8 +1577,11 @@ def _balanced_role_flows(flows: List[Dict[str, str]], limit: int = 8) -> List[Di
 
 def _format_validated_flows(flows: List[Dict[str, str]]) -> str:
     if not flows:
-        return "- 정보: 타겟 고객 -> 코어 플랫폼 : 사용 데이터"
-    return "\n".join(f'- {flow["type"]}: {flow["from"]} -> {flow["to"]} : {flow["label"]}' for flow in flows[:8])
+        return "- from=타겟 고객 | to=코어 플랫폼 | label=사용 데이터 | flow_type=정보"
+    return "\n".join(
+        f'- from={flow["from"]} | to={flow["to"]} | label={flow["label"]} | flow_type={flow["type"]}'
+        for flow in flows[:8]
+    )
 
 
 def _extract_flow_labels(flows: List[Dict[str, str]]) -> List[str]:
