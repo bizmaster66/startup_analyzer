@@ -1222,10 +1222,11 @@ def _validate_role_flows(
     bmc_data: Dict[str, Any],
 ) -> List[Dict[str, str]]:
     draft_flows, ambiguous_flows = _build_rule_based_role_flows(bmc_data)
+    draft_flows = _ensure_core_company_money_flows(draft_flows, bmc_data)
     if ambiguous_flows:
         repaired = _repair_ambiguous_flows_with_model(client, company_name, bmc_data, draft_flows, ambiguous_flows)
         if repaired:
-            return _balanced_role_flows(repaired)
+            return _balanced_role_flows(_ensure_core_company_money_flows(repaired, bmc_data))
     return _balanced_role_flows(draft_flows)
 
 
@@ -1280,7 +1281,7 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
         if any(token in label for token in ["유통 수수료", "입점 수수료", "채널 수수료"]):
             return {"from": "기업 본체", "to": "커뮤니티 및 채널", "label": label}
         if any(token in label for token in ["판매 대금", "구축비", "유지보수", "이용료", "구독", "SaaS"]):
-            return {"from": "타겟 고객", "to": "기업 본체", "label": label}
+            return {"from": "타겟 고객", "to": _money_revenue_target(label, bmc_data), "label": label}
         if any(token in label for token in ["결제", "PG", "정산"]):
             return {"from": "기업 본체", "to": "핵심 파트너", "label": label}
         if any(token in label for token in ["마케팅", "광고"]) and "비용" in label:
@@ -1292,13 +1293,13 @@ def _infer_role_flow(flow_type: str, label: str, bmc_data: Dict[str, Any]) -> Op
         if any(token in label for token in ["제휴", "리셀", "채널", "도입", "파트너"]) and any(
             token in revenue_text + channel_text + relation_text for token in ["수수료", "제휴", "리셀", "도입", "파트너"]
         ):
-            return {"from": "커뮤니티 및 채널", "to": "기업 본체", "label": label}
+            return {"from": "커뮤니티 및 채널", "to": _money_revenue_target(label, bmc_data), "label": label}
         if any(token in label for token in ["구독", "이용", "사용", "멤버십", "가입"]) or any(
             token in revenue_text for token in ["구독", "이용", "멤버십", "가입", "사용료"]
         ):
-            return {"from": "타겟 고객", "to": "기업 본체", "label": label}
+            return {"from": "타겟 고객", "to": _money_revenue_target(label, bmc_data), "label": label}
         if "수수료" in label and "파트너" not in revenue_text + channel_text + relation_text:
-            return {"from": "타겟 고객", "to": "기업 본체", "label": label}
+            return {"from": "타겟 고객", "to": _money_revenue_target(label, bmc_data), "label": label}
         if any(token in cost_text for token in ["인프라", "클라우드"]) and "비용" in label:
             return {"from": "기업 본체", "to": "핵심 자원", "label": label}
         if any(token in cost_text for token in ["모델", "데이터", "라이선스"]) and "비용" in label:
@@ -1377,6 +1378,13 @@ def _repair_ambiguous_flows_with_model(
 - 방향이 틀렸다면 수정
 - 불필요한 흐름은 제거 가능
 - 최종 흐름은 최대 8개
+- 돈 흐름은 반드시 다음을 구분해서 판단:
+  1. 고객/채널의 돈이 코어 플랫폼으로 먼저 들어오는지
+  2. 고객/채널의 돈이 기업 본체로 바로 들어오는지
+  3. 코어 플랫폼에서 기업 본체로 매출 정산이 필요한지
+  4. 기업 본체에서 코어 플랫폼으로 운영비 집행이 필요한지
+- 코어를 통해 수익화되는 서비스형/구독형/플랫폼형 BM이면 `타겟 고객 -> 코어 플랫폼 -> 기업 본체` 구조를 우선 검토
+- 제품 판매, 구축비, 납품비처럼 계약/판매 주체가 회사인 경우는 `타겟 고객 -> 기업 본체` 직결을 우선 검토
 - JSON ONLY
 
 [출력 스키마]
@@ -1405,6 +1413,117 @@ def _repair_ambiguous_flows_with_model(
     return _dedupe_role_flows(flows)
 
 
+# --- NEW FUNCTION ---
+def _money_revenue_target(label: str, bmc_data: Dict[str, Any]) -> str:
+    revenue_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", [])))
+    channel_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("channels", [])))
+    middle_text = clean_korean_label(bmc_data.get("middle_layer", ""))
+    bm_text = clean_korean_label(bmc_data.get("bm_type", ""))
+    archetype = _infer_business_archetype(bmc_data)
+    label_text = clean_korean_label(label)
+    combined = " ".join([label_text, revenue_text, channel_text, middle_text, bm_text])
+
+    direct_company_keywords = [
+        "판매 대금",
+        "제품 판매",
+        "시스템 판매",
+        "구축비",
+        "유지보수",
+        "라이선스",
+        "라이선싱",
+        "납품",
+        "솔루션 구축",
+    ]
+    via_core_keywords = [
+        "구독",
+        "이용료",
+        "사용료",
+        "멤버십",
+        "가입",
+        "앱",
+        "플랫폼",
+        "프리미엄 기능",
+        "콘텐츠 판매",
+        "광고 수익",
+        "유료 서비스",
+    ]
+
+    if any(keyword in label_text for keyword in direct_company_keywords):
+        return "기업 본체"
+    if any(keyword in label_text for keyword in ["SaaS", "구독", "이용료", "사용료", "멤버십"]):
+        return "코어 플랫폼"
+    if archetype in {"content_ip_platform", "commerce_platform"} and any(keyword in combined for keyword in via_core_keywords):
+        return "코어 플랫폼"
+    if archetype == "brand_consumer" and any(keyword in combined for keyword in ["앱", "멤버십", "구독"]):
+        return "코어 플랫폼"
+    return "기업 본체"
+
+
+# --- NEW FUNCTION ---
+def _ensure_core_company_money_flows(flows: List[Dict[str, str]], bmc_data: Dict[str, Any]) -> List[Dict[str, str]]:
+    adjusted = list(_dedupe_role_flows(flows))
+    incoming_to_core = [
+        flow
+        for flow in adjusted
+        if flow.get("type") == "돈" and flow.get("to") == "코어 플랫폼"
+    ]
+    has_core_to_company = any(
+        flow.get("type") == "돈" and flow.get("from") == "코어 플랫폼" and flow.get("to") == "기업 본체"
+        for flow in adjusted
+    )
+    if incoming_to_core and not has_core_to_company:
+        adjusted.append(
+            {
+                "type": "돈",
+                "from": "코어 플랫폼",
+                "to": "기업 본체",
+                "label": _core_revenue_transfer_label(bmc_data),
+            }
+        )
+
+    has_company_to_core = any(
+        flow.get("type") == "돈" and flow.get("from") == "기업 본체" and flow.get("to") == "코어 플랫폼"
+        for flow in adjusted
+    )
+    if _needs_company_to_core_cost_flow(bmc_data) and not has_company_to_core:
+        adjusted.append(
+            {
+                "type": "돈",
+                "from": "기업 본체",
+                "to": "코어 플랫폼",
+                "label": _company_to_core_cost_label(bmc_data),
+            }
+        )
+    return _dedupe_role_flows(adjusted)
+
+
+# --- NEW FUNCTION ---
+def _core_revenue_transfer_label(bmc_data: Dict[str, Any]) -> str:
+    revenue_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", [])))
+    if any(token in revenue_text for token in ["구독", "멤버십", "가입"]):
+        return "구독 매출"
+    if any(token in revenue_text for token in ["콘텐츠", "라이선싱", "IP"]):
+        return "콘텐츠 매출"
+    return "매출 정산"
+
+
+# --- NEW FUNCTION ---
+def _company_to_core_cost_label(bmc_data: Dict[str, Any]) -> str:
+    cost_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("cost_structure", [])))
+    if any(token in cost_text for token in ["개발", "유지보수", "플랫폼", "AI", "서버", "인프라"]):
+        return "운영비 집행"
+    return "운영 투자"
+
+
+# --- NEW FUNCTION ---
+def _needs_company_to_core_cost_flow(bmc_data: Dict[str, Any]) -> bool:
+    cost_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("cost_structure", [])))
+    revenue_text = " ".join(((bmc_data.get("business_model_canvas", {}) or {}).get("revenue_streams", [])))
+    middle_text = clean_korean_label(bmc_data.get("middle_layer", ""))
+    combined = " ".join([cost_text, revenue_text, middle_text])
+    return any(token in combined for token in ["플랫폼", "앱", "AI", "개발", "운영", "인프라", "서버", "콘텐츠"])
+
+
 def _dedupe_role_flows(flows: List[Dict[str, str]]) -> List[Dict[str, str]]:
     seen = set()
     deduped = []
@@ -1419,14 +1538,25 @@ def _dedupe_role_flows(flows: List[Dict[str, str]]) -> List[Dict[str, str]]:
 
 def _balanced_role_flows(flows: List[Dict[str, str]], limit: int = 8) -> List[Dict[str, str]]:
     deduped = _dedupe_role_flows(flows)
+    protected = [
+        flow for flow in deduped
+        if flow.get("type") == "돈"
+        and (
+            (flow.get("from") == "코어 플랫폼" and flow.get("to") == "기업 본체")
+            or (flow.get("from") == "기업 본체" and flow.get("to") == "코어 플랫폼")
+        )
+    ]
+    working = [flow for flow in deduped if flow not in protected]
     groups = {
-        "정보": [flow for flow in deduped if flow.get("type") == "정보"],
-        "돈": [flow for flow in deduped if flow.get("type") == "돈"],
-        "서비스": [flow for flow in deduped if flow.get("type") == "서비스"],
+        "정보": [flow for flow in working if flow.get("type") == "정보"],
+        "돈": [flow for flow in working if flow.get("type") == "돈"],
+        "서비스": [flow for flow in working if flow.get("type") == "서비스"],
     }
-    selected: List[Dict[str, str]] = []
+    selected: List[Dict[str, str]] = protected[:2]
     # First pass: keep up to 2 from each type so one category does not starve others.
     for flow_type in ["정보", "돈", "서비스"]:
+        if len(selected) >= limit:
+            break
         selected.extend(groups[flow_type][:2])
     if len(selected) < limit:
         leftovers: List[Dict[str, str]] = []
